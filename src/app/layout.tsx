@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Roboto } from "next/font/google";
 import { Layout } from "@/components/layout";
 import { AuthProvider } from "@/context/AuthContext";
+import { Analytics } from "@vercel/analytics/react";
 
 const roboto = Roboto({
   subsets: ["latin"],
@@ -32,6 +33,7 @@ export default function RootLayout({
             {children}
           </Layout>
         </AuthProvider>
+        <Analytics />
         <link
           rel="stylesheet"
           href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.1/css/all.min.css"
