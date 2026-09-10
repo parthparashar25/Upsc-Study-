@@ -2,6 +2,7 @@ export interface Profile {
   id: string;
   full_name: string;
   email: string;
+  role?: string;
   optional_subject?: string;
   daily_study_target: number;
   created_at?: string;

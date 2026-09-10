@@ -2,7 +2,7 @@
 
 export * from "./navbar";
 export * from "./footer";
-export * from "./layout";
+export * from "./Layout";
 export * from "./background-card";
 export * from "./course-card";
 export * from "./feature-card";

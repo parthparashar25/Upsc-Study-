@@ -1,5 +1,15 @@
 import { supabase, isSupabaseConfigured } from './supabase';
-import { DailyStats, HabitCompletion, Note, Profile, StudyFile, Subject, SyllabusTopic, TopicProgress, TopicStatus } from '@/types/database';
+import {
+  DailyStats,
+  HabitCompletion,
+  Note,
+  Profile,
+  StudyFile,
+  Subject,
+  SyllabusTopic,
+  TopicProgress,
+  TopicStatus,
+} from '@/types/database';
 import { INITIAL_SUBJECTS } from './constants';
 import { MASTER_SYLLABUS, getAllTopics, computeTopicStatus } from './syllabus-data';
 
@@ -30,31 +40,79 @@ function setLocal<T>(key: string, value: T): void {
 }
 
 // ----------------------------------------------------------------------
+// IN-MEMORY PERFORMANCE CACHE & REQUEST DEDUPLICATION
+// Eliminates network latency on repeated views, tab changes & concurrent calls
+// ----------------------------------------------------------------------
+const cache = {
+  subjects: null as Subject[] | null,
+  topicProgress: {} as Record<string, { data: Record<string, TopicProgress>; ts: number }>,
+  habits: {} as Record<string, { data: Record<string, boolean>; ts: number }>,
+  dailyStats: {} as Record<string, { data: DailyStats; ts: number }>,
+  monthSummary: {} as Record<string, { data: Record<string, DaySummary>; ts: number }>,
+  notes: {} as Record<string, { data: Note[]; ts: number }>,
+  studyFiles: {} as Record<string, { data: StudyFile[]; ts: number }>,
+  profile: {} as Record<string, { data: Profile; ts: number }>,
+  syllabusStats: {} as Record<string, { data: any; ts: number }>,
+};
+
+const inFlight = new Map<string, Promise<any>>();
+
+function dedup<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  if (inFlight.has(key)) {
+    return inFlight.get(key) as Promise<T>;
+  }
+  const promise = fn().finally(() => {
+    inFlight.delete(key);
+  });
+  inFlight.set(key, promise);
+  return promise;
+}
+
+const CACHE_TTL_MS = 60000; // 1 minute fresh cache window
+
+// ----------------------------------------------------------------------
 // CHAPTER / SYLLABUS TOPIC PROGRESS API
 // ----------------------------------------------------------------------
 
 export async function fetchTopicProgress(userId: string): Promise<Record<string, TopicProgress>> {
-  if (isSupabaseConfigured && userId) {
-    try {
-      const { data, error } = await supabase
-        .from('topic_progress')
-        .select('*')
-        .eq('user_id', userId);
+  if (!userId) return getLocal<Record<string, TopicProgress>>(LS_TOPIC_PROGRESS, {});
 
-      if (!error && data) {
-        const map: Record<string, TopicProgress> = {};
-        data.forEach((row: any) => {
-          map[row.topic_id] = row as TopicProgress;
-        });
-        return map;
+  // 1. Check in-memory cache for instant 0ms response
+  const cached = cache.topicProgress[userId];
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  // 2. Fetch from Supabase with request deduplication
+  if (isSupabaseConfigured) {
+    return dedup(`topicProgress_${userId}`, async () => {
+      try {
+        const { data, error } = await supabase
+          .from('topic_progress')
+          .select('*')
+          .eq('user_id', userId);
+
+        if (!error && data) {
+          const map: Record<string, TopicProgress> = {};
+          data.forEach((row: any) => {
+            map[row.topic_id] = row as TopicProgress;
+          });
+          cache.topicProgress[userId] = { data: map, ts: Date.now() };
+          setLocal(LS_TOPIC_PROGRESS, map);
+          return map;
+        }
+      } catch (err) {
+        console.error('Error fetching topic progress from Supabase:', err);
       }
-    } catch (err) {
-      console.error('Error fetching topic progress from Supabase:', err);
-    }
+      const fallback = getLocal<Record<string, TopicProgress>>(LS_TOPIC_PROGRESS, {});
+      cache.topicProgress[userId] = { data: fallback, ts: Date.now() };
+      return fallback;
+    });
   }
 
   // Fallback
   const allProgress = getLocal<Record<string, TopicProgress>>(LS_TOPIC_PROGRESS, {});
+  cache.topicProgress[userId] = { data: allProgress, ts: Date.now() };
   return allProgress;
 }
 
@@ -66,7 +124,10 @@ export async function updateTopicProgress(
   const now = new Date().toISOString();
 
   // Determine current record
-  const currentMap = getLocal<Record<string, TopicProgress>>(LS_TOPIC_PROGRESS, {});
+  const currentMap =
+    cache.topicProgress[userId]?.data ||
+    getLocal<Record<string, TopicProgress>>(LS_TOPIC_PROGRESS, {});
+
   const current = currentMap[topicId] || {
     user_id: userId || 'demo-user',
     topic_id: topicId,
@@ -97,43 +158,52 @@ export async function updateTopicProgress(
     updated_at: now,
   };
 
-  if (isSupabaseConfigured && userId) {
-    try {
-      const { data, error } = await supabase
-        .from('topic_progress')
-        .upsert(
-          {
-            user_id: userId,
-            topic_id: topicId,
-            study_completed: study,
-            revision_completed: revision,
-            pyq_completed: pyq,
-            status,
-            notes,
-            last_studied: now,
-            updated_at: now,
-          },
-          { onConflict: 'user_id,topic_id' }
-        )
-        .select()
-        .single();
+  // Immediate optimistic update in memory for 0ms delay
+  currentMap[topicId] = payload;
+  cache.topicProgress[userId] = { data: currentMap, ts: Date.now() };
+  delete cache.syllabusStats[userId]; // invalidate aggregate stats
+  setLocal(LS_TOPIC_PROGRESS, currentMap);
 
-      if (!error && data) {
-        currentMap[topicId] = data as TopicProgress;
-        setLocal(LS_TOPIC_PROGRESS, currentMap);
-        return data as TopicProgress;
+  if (isSupabaseConfigured && userId) {
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('topic_progress')
+          .upsert(
+            {
+              user_id: userId,
+              topic_id: topicId,
+              study_completed: study,
+              revision_completed: revision,
+              pyq_completed: pyq,
+              status,
+              notes,
+              last_studied: now,
+              updated_at: now,
+            },
+            { onConflict: 'user_id,topic_id' }
+          )
+          .select()
+          .single();
+
+        if (!error && data) {
+          currentMap[topicId] = data as TopicProgress;
+          cache.topicProgress[userId] = { data: currentMap, ts: Date.now() };
+          setLocal(LS_TOPIC_PROGRESS, currentMap);
+        }
+      } catch (err) {
+        console.error('Error updating topic progress in Supabase:', err);
       }
-    } catch (err) {
-      console.error('Error updating topic progress in Supabase:', err);
-    }
+    })();
   }
 
-  currentMap[topicId] = payload;
-  setLocal(LS_TOPIC_PROGRESS, currentMap);
   return payload;
 }
 
-export async function fetchRecentlyStudiedTopics(userId: string, limit = 5): Promise<(SyllabusTopic & { progress: TopicProgress })[]> {
+export async function fetchRecentlyStudiedTopics(
+  userId: string,
+  limit = 5
+): Promise<(SyllabusTopic & { progress: TopicProgress })[]> {
   const allTopics = getAllTopics();
   const progressMap = await fetchTopicProgress(userId);
 
@@ -190,6 +260,10 @@ export async function fetchSyllabusStatistics(userId: string): Promise<{
   mains: SyllabusCategoryStats;
   subjectStats: Record<string, SyllabusCategoryStats>;
 }> {
+  if (cache.syllabusStats[userId] && Date.now() - cache.syllabusStats[userId].ts < CACHE_TTL_MS) {
+    return cache.syllabusStats[userId].data;
+  }
+
   const allTopics = getAllTopics();
   const progressMap = await fetchTopicProgress(userId);
 
@@ -251,27 +325,41 @@ export async function fetchSyllabusStatistics(userId: string): Promise<{
     s.percent = s.total > 0 ? Math.round((s.completed / s.total) * 100) : 0;
   });
 
-  return { overall, prelims, mains, subjectStats };
+  const result = { overall, prelims, mains, subjectStats };
+  cache.syllabusStats[userId] = { data: result, ts: Date.now() };
+  return result;
 }
 
 // ----------------------------------------------------------------------
 // SUBJECTS API
 // ----------------------------------------------------------------------
 export async function fetchSubjects(): Promise<Subject[]> {
-  if (isSupabaseConfigured) {
-    try {
-      const { data, error } = await supabase
-        .from('subjects')
-        .select('*')
-        .order('display_order', { ascending: true });
-
-      if (!error && data && data.length > 0) {
-        return data as Subject[];
-      }
-    } catch (err) {
-      console.warn('Could not fetch subjects from Supabase, using defaults', err);
-    }
+  // Return cached metadata immediately in 0ms
+  if (cache.subjects && cache.subjects.length > 0) {
+    return cache.subjects;
   }
+
+  if (isSupabaseConfigured) {
+    return dedup('subjects', async () => {
+      try {
+        const { data, error } = await supabase
+          .from('subjects')
+          .select('*')
+          .order('display_order', { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          cache.subjects = data as Subject[];
+          return cache.subjects;
+        }
+      } catch (err) {
+        console.warn('Could not fetch subjects from Supabase, using defaults', err);
+      }
+      cache.subjects = INITIAL_SUBJECTS;
+      return INITIAL_SUBJECTS;
+    });
+  }
+
+  cache.subjects = INITIAL_SUBJECTS;
   return INITIAL_SUBJECTS;
 }
 
@@ -279,33 +367,49 @@ export async function fetchSubjects(): Promise<Subject[]> {
 // HABITS API
 // ----------------------------------------------------------------------
 export async function fetchHabitsForDate(userId: string, dateStr: string): Promise<Record<string, boolean>> {
-  if (isSupabaseConfigured && userId) {
-    try {
-      const { data, error } = await supabase
-        .from('habit_completions')
-        .select('subject_id, completed')
-        .eq('user_id', userId)
-        .eq('completion_date', dateStr);
-
-      if (!error && data) {
-        const map: Record<string, boolean> = {};
-        data.forEach(row => {
-          map[row.subject_id] = row.completed;
-        });
-        return map;
-      }
-    } catch (err) {
-      console.error('Error fetching habit completions:', err);
-    }
+  const cacheKey = `${userId}_${dateStr}`;
+  const cached = cache.habits[cacheKey];
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    return cached.data;
   }
 
+  if (isSupabaseConfigured && userId) {
+    return dedup(`habits_${cacheKey}`, async () => {
+      try {
+        const { data, error } = await supabase
+          .from('habit_completions')
+          .select('subject_id, completed')
+          .eq('user_id', userId)
+          .eq('completion_date', dateStr);
+
+        if (!error && data) {
+          const map: Record<string, boolean> = {};
+          data.forEach((row) => {
+            map[row.subject_id] = row.completed;
+          });
+          cache.habits[cacheKey] = { data: map, ts: Date.now() };
+          return map;
+        }
+      } catch (err) {
+        console.error('Error fetching habit completions:', err);
+      }
+      return getLocalHabits(userId, dateStr);
+    });
+  }
+
+  return getLocalHabits(userId, dateStr);
+}
+
+function getLocalHabits(userId: string, dateStr: string): Record<string, boolean> {
   const habits = getLocal<HabitCompletion[]>(LS_HABITS, []);
   const map: Record<string, boolean> = {};
   habits
-    .filter(h => h.completion_date === dateStr && (!userId || h.user_id === userId))
-    .forEach(h => {
+    .filter((h) => h.completion_date === dateStr && (!userId || h.user_id === userId))
+    .forEach((h) => {
       map[h.subject_id] = h.completed;
     });
+  const cacheKey = `${userId}_${dateStr}`;
+  cache.habits[cacheKey] = { data: map, ts: Date.now() };
   return map;
 }
 
@@ -315,20 +419,32 @@ export async function toggleHabitCompletion(
   dateStr: string,
   completed: boolean
 ): Promise<boolean> {
+  const cacheKey = `${userId}_${dateStr}`;
+  if (!cache.habits[cacheKey]) {
+    cache.habits[cacheKey] = { data: {}, ts: Date.now() };
+  }
+
+  // Instant optimistic in-memory update (0ms)
+  cache.habits[cacheKey].data[subjectId] = completed;
+
+  // Invalidate month summary so calendar updates
+  const [yearStr, monthStr] = dateStr.split('-');
+  if (yearStr && monthStr) {
+    delete cache.monthSummary[`${userId}_${parseInt(yearStr)}_${parseInt(monthStr)}`];
+  }
+
   if (isSupabaseConfigured && userId) {
     try {
-      const { error } = await supabase
-        .from('habit_completions')
-        .upsert(
-          {
-            user_id: userId,
-            subject_id: subjectId,
-            completion_date: dateStr,
-            completed,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'user_id,subject_id,completion_date' }
-        );
+      const { error } = await supabase.from('habit_completions').upsert(
+        {
+          user_id: userId,
+          subject_id: subjectId,
+          completion_date: dateStr,
+          completed,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id,subject_id,completion_date' }
+      );
 
       if (error) {
         console.error('Supabase habit upsert error:', error);
@@ -343,7 +459,7 @@ export async function toggleHabitCompletion(
 
   const habits = getLocal<HabitCompletion[]>(LS_HABITS, []);
   const existingIdx = habits.findIndex(
-    h => h.subject_id === subjectId && h.completion_date === dateStr && h.user_id === (userId || 'demo-user')
+    (h) => h.subject_id === subjectId && h.completion_date === dateStr && h.user_id === (userId || 'demo-user')
   );
 
   if (existingIdx >= 0) {
@@ -368,6 +484,12 @@ export async function toggleHabitCompletion(
 // DAILY STATS API
 // ----------------------------------------------------------------------
 export async function fetchDailyStats(userId: string, dateStr: string): Promise<DailyStats> {
+  const cacheKey = `${userId}_${dateStr}`;
+  const cached = cache.dailyStats[cacheKey];
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
   const defaultStats: DailyStats = {
     user_id: userId || 'demo-user',
     study_date: dateStr,
@@ -378,37 +500,59 @@ export async function fetchDailyStats(userId: string, dateStr: string): Promise<
   };
 
   if (isSupabaseConfigured && userId) {
-    try {
-      const { data, error } = await supabase
-        .from('daily_stats')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('study_date', dateStr)
-        .maybeSingle();
+    return dedup(`dailyStats_${cacheKey}`, async () => {
+      try {
+        const { data, error } = await supabase
+          .from('daily_stats')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('study_date', dateStr)
+          .maybeSingle();
 
-      if (!error && data) {
-        return data as DailyStats;
+        if (!error && data) {
+          cache.dailyStats[cacheKey] = { data: data as DailyStats, ts: Date.now() };
+          return data as DailyStats;
+        }
+      } catch (err) {
+        console.error('Error fetching daily stats:', err);
       }
-    } catch (err) {
-      console.error('Error fetching daily stats:', err);
-    }
+      cache.dailyStats[cacheKey] = { data: defaultStats, ts: Date.now() };
+      return defaultStats;
+    });
   }
 
   const allStats = getLocal<DailyStats[]>(LS_STATS, []);
-  const found = allStats.find(s => s.study_date === dateStr && (!userId || s.user_id === userId));
-  return found || defaultStats;
+  const found = allStats.find((s) => s.study_date === dateStr && (!userId || s.user_id === userId));
+  const res = found || defaultStats;
+  cache.dailyStats[cacheKey] = { data: res, ts: Date.now() };
+  return res;
 }
 
-export async function saveDailyStats(userId: string, stats: Partial<DailyStats> & { study_date: string }): Promise<boolean> {
-  const payload = {
+export async function saveDailyStats(
+  userId: string,
+  stats: Partial<DailyStats> & { study_date: string }
+): Promise<boolean> {
+  const cacheKey = `${userId}_${stats.study_date}`;
+  const payload: DailyStats = {
+    id: cache.dailyStats[cacheKey]?.data?.id || `local-stat-${Date.now()}`,
     user_id: userId || 'demo-user',
     study_date: stats.study_date,
     study_hours: Number(stats.study_hours) || 0,
     study_minutes: Number(stats.study_minutes) || 0,
     revision_count: Number(stats.revision_count) || 0,
     pyq_count: Number(stats.pyq_count) || 0,
+    created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
+
+  // Instant optimistic update in memory (0ms)
+  cache.dailyStats[cacheKey] = { data: payload, ts: Date.now() };
+
+  // Invalidate month summary so calendar updates immediately
+  const [yearStr, monthStr] = stats.study_date.split('-');
+  if (yearStr && monthStr) {
+    delete cache.monthSummary[`${userId}_${parseInt(yearStr)}_${parseInt(monthStr)}`];
+  }
 
   if (isSupabaseConfigured && userId) {
     try {
@@ -428,15 +572,13 @@ export async function saveDailyStats(userId: string, stats: Partial<DailyStats> 
   }
 
   const allStats = getLocal<DailyStats[]>(LS_STATS, []);
-  const idx = allStats.findIndex(s => s.study_date === stats.study_date && s.user_id === (userId || 'demo-user'));
+  const idx = allStats.findIndex(
+    (s) => s.study_date === stats.study_date && s.user_id === (userId || 'demo-user')
+  );
   if (idx >= 0) {
     allStats[idx] = { ...allStats[idx], ...payload };
   } else {
-    allStats.push({
-      id: `local-stat-${Date.now()}`,
-      created_at: new Date().toISOString(),
-      ...payload,
-    });
+    allStats.push(payload);
   }
   setLocal(LS_STATS, allStats);
   return true;
@@ -455,7 +597,17 @@ export interface DaySummary {
   pyqCount: number;
 }
 
-export async function fetchMonthSummary(userId: string, year: number, month: number): Promise<Record<string, DaySummary>> {
+export async function fetchMonthSummary(
+  userId: string,
+  year: number,
+  month: number
+): Promise<Record<string, DaySummary>> {
+  const cacheKey = `${userId}_${year}_${month}`;
+  const cached = cache.monthSummary[cacheKey];
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDay = new Date(year, month, 0).getDate();
   const endDate = `${year}-${String(month).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`;
@@ -463,71 +615,84 @@ export async function fetchMonthSummary(userId: string, year: number, month: num
   const summaryMap: Record<string, DaySummary> = {};
 
   if (isSupabaseConfigured && userId) {
-    try {
-      const [habitsRes, statsRes] = await Promise.all([
-        supabase
-          .from('habit_completions')
-          .select('completion_date, completed')
-          .eq('user_id', userId)
-          .gte('completion_date', startDate)
-          .lte('completion_date', endDate),
-        supabase
-          .from('daily_stats')
-          .select('*')
-          .eq('user_id', userId)
-          .gte('study_date', startDate)
-          .lte('study_date', endDate),
-      ]);
+    return dedup(`monthSummary_${cacheKey}`, async () => {
+      try {
+        const [habitsRes, statsRes] = await Promise.all([
+          supabase
+            .from('habit_completions')
+            .select('completion_date, completed')
+            .eq('user_id', userId)
+            .gte('completion_date', startDate)
+            .lte('completion_date', endDate),
+          supabase
+            .from('daily_stats')
+            .select('*')
+            .eq('user_id', userId)
+            .gte('study_date', startDate)
+            .lte('study_date', endDate),
+        ]);
 
-      if (habitsRes.data) {
-        habitsRes.data.forEach(h => {
-          if (!summaryMap[h.completion_date]) {
-            summaryMap[h.completion_date] = {
-              date: h.completion_date,
-              completedCount: 0,
-              totalPlanned: 8,
-              studyHours: 0,
-              studyMinutes: 0,
-              revisionCount: 0,
-              pyqCount: 0,
-            };
-          }
-          if (h.completed) {
-            summaryMap[h.completion_date].completedCount += 1;
-          }
-        });
+        if (habitsRes.data) {
+          habitsRes.data.forEach((h) => {
+            if (!summaryMap[h.completion_date]) {
+              summaryMap[h.completion_date] = {
+                date: h.completion_date,
+                completedCount: 0,
+                totalPlanned: 8,
+                studyHours: 0,
+                studyMinutes: 0,
+                revisionCount: 0,
+                pyqCount: 0,
+              };
+            }
+            if (h.completed) {
+              summaryMap[h.completion_date].completedCount += 1;
+            }
+          });
+        }
+
+        if (statsRes.data) {
+          statsRes.data.forEach((s) => {
+            if (!summaryMap[s.study_date]) {
+              summaryMap[s.study_date] = {
+                date: s.study_date,
+                completedCount: 0,
+                totalPlanned: 8,
+                studyHours: 0,
+                studyMinutes: 0,
+                revisionCount: 0,
+                pyqCount: 0,
+              };
+            }
+            summaryMap[s.study_date].studyHours = s.study_hours;
+            summaryMap[s.study_date].studyMinutes = s.study_minutes;
+            summaryMap[s.study_date].revisionCount = s.revision_count;
+            summaryMap[s.study_date].pyqCount = s.pyq_count;
+          });
+        }
+
+        cache.monthSummary[cacheKey] = { data: summaryMap, ts: Date.now() };
+        return summaryMap;
+      } catch (err) {
+        console.error('Error fetching calendar month summary:', err);
       }
-
-      if (statsRes.data) {
-        statsRes.data.forEach(s => {
-          if (!summaryMap[s.study_date]) {
-            summaryMap[s.study_date] = {
-              date: s.study_date,
-              completedCount: 0,
-              totalPlanned: 8,
-              studyHours: 0,
-              studyMinutes: 0,
-              revisionCount: 0,
-              pyqCount: 0,
-            };
-          }
-          summaryMap[s.study_date].studyHours = s.study_hours;
-          summaryMap[s.study_date].studyMinutes = s.study_minutes;
-          summaryMap[s.study_date].revisionCount = s.revision_count;
-          summaryMap[s.study_date].pyqCount = s.pyq_count;
-        });
-      }
-
-      return summaryMap;
-    } catch (err) {
-      console.error('Error fetching calendar month summary:', err);
-    }
+      return getLocalMonthSummary(userId, startDate, endDate, summaryMap);
+    });
   }
 
+  return getLocalMonthSummary(userId, startDate, endDate, summaryMap);
+}
+
+function getLocalMonthSummary(
+  userId: string,
+  startDate: string,
+  endDate: string,
+  summaryMap: Record<string, DaySummary>
+): Record<string, DaySummary> {
   const habits = getLocal<HabitCompletion[]>(LS_HABITS, []);
   const stats = getLocal<DailyStats[]>(LS_STATS, []);
 
-  habits.forEach(h => {
+  habits.forEach((h) => {
     if (h.completion_date >= startDate && h.completion_date <= endDate && (!userId || h.user_id === userId)) {
       if (!summaryMap[h.completion_date]) {
         summaryMap[h.completion_date] = {
@@ -546,7 +711,7 @@ export async function fetchMonthSummary(userId: string, year: number, month: num
     }
   });
 
-  stats.forEach(s => {
+  stats.forEach((s) => {
     if (s.study_date >= startDate && s.study_date <= endDate && (!userId || s.user_id === userId)) {
       if (!summaryMap[s.study_date]) {
         summaryMap[s.study_date] = {
@@ -573,40 +738,60 @@ export async function fetchMonthSummary(userId: string, year: number, month: num
 // NOTES API
 // ----------------------------------------------------------------------
 export async function fetchNotes(userId: string): Promise<Note[]> {
-  if (isSupabaseConfigured && userId) {
-    try {
-      const { data, error } = await supabase
-        .from('notes')
-        .select(`
-          id,
-          user_id,
-          title,
-          subject_id,
-          topic,
-          content,
-          created_at,
-          updated_at,
-          subjects ( name )
-        `)
-        .eq('user_id', userId)
-        .order('updated_at', { ascending: false });
-
-      if (!error && data) {
-        return data.map((n: any) => ({
-          ...n,
-          subject_name: n.subjects?.name || '',
-        }));
-      }
-    } catch (err) {
-      console.error('Error fetching notes from Supabase:', err);
-    }
+  if (cache.notes[userId] && Date.now() - cache.notes[userId].ts < CACHE_TTL_MS) {
+    return cache.notes[userId].data;
   }
 
-  return getLocal<Note[]>(LS_NOTES, []);
+  if (isSupabaseConfigured && userId) {
+    return dedup(`notes_${userId}`, async () => {
+      try {
+        const { data, error } = await supabase
+          .from('notes')
+          .select(`
+            id,
+            user_id,
+            title,
+            subject_id,
+            topic,
+            content,
+            created_at,
+            updated_at,
+            subjects ( name )
+          `)
+          .eq('user_id', userId)
+          .order('updated_at', { ascending: false });
+
+        if (!error && data) {
+          const notes = data.map((n: any) => ({
+            ...n,
+            subject_name: n.subjects?.name || '',
+          }));
+          cache.notes[userId] = { data: notes, ts: Date.now() };
+          setLocal(LS_NOTES, notes);
+          return notes;
+        }
+      } catch (err) {
+        console.error('Error fetching notes from Supabase:', err);
+      }
+      const local = getLocal<Note[]>(LS_NOTES, []);
+      cache.notes[userId] = { data: local, ts: Date.now() };
+      return local;
+    });
+  }
+
+  const local = getLocal<Note[]>(LS_NOTES, []);
+  cache.notes[userId] = { data: local, ts: Date.now() };
+  return local;
 }
 
-export async function saveNote(userId: string, note: Partial<Note>): Promise<{ success: boolean; note?: Note }> {
+export async function saveNote(
+  userId: string,
+  note: Partial<Note>
+): Promise<{ success: boolean; note?: Note }> {
   const now = new Date().toISOString();
+
+  // Optimistic update in memory
+  const currentNotes = cache.notes[userId]?.data || getLocal<Note[]>(LS_NOTES, []);
 
   if (isSupabaseConfigured && userId) {
     try {
@@ -629,7 +814,11 @@ export async function saveNote(userId: string, note: Partial<Note>): Promise<{ s
           .single();
 
         if (error) throw error;
-        return { success: true, note: data as Note };
+        const saved = data as Note;
+        const idx = currentNotes.findIndex((n) => n.id === note.id);
+        if (idx >= 0) currentNotes[idx] = { ...currentNotes[idx], ...saved };
+        cache.notes[userId] = { data: [...currentNotes], ts: Date.now() };
+        return { success: true, note: saved };
       } else {
         payload.created_at = now;
         const { data, error } = await supabase
@@ -639,7 +828,10 @@ export async function saveNote(userId: string, note: Partial<Note>): Promise<{ s
           .single();
 
         if (error) throw error;
-        return { success: true, note: data as Note };
+        const created = data as Note;
+        const updatedList = [created, ...currentNotes];
+        cache.notes[userId] = { data: updatedList, ts: Date.now() };
+        return { success: true, note: created };
       }
     } catch (err) {
       console.error('Error saving note in Supabase:', err);
@@ -649,7 +841,7 @@ export async function saveNote(userId: string, note: Partial<Note>): Promise<{ s
 
   const notes = getLocal<Note[]>(LS_NOTES, []);
   if (note.id) {
-    const idx = notes.findIndex(n => n.id === note.id);
+    const idx = notes.findIndex((n) => n.id === note.id);
     if (idx >= 0) {
       notes[idx] = {
         ...notes[idx],
@@ -661,6 +853,7 @@ export async function saveNote(userId: string, note: Partial<Note>): Promise<{ s
         updated_at: now,
       };
       setLocal(LS_NOTES, notes);
+      cache.notes[userId] = { data: [...notes], ts: Date.now() };
       return { success: true, note: notes[idx] };
     }
   }
@@ -678,10 +871,16 @@ export async function saveNote(userId: string, note: Partial<Note>): Promise<{ s
   };
   notes.unshift(newNote);
   setLocal(LS_NOTES, notes);
+  cache.notes[userId] = { data: [...notes], ts: Date.now() };
   return { success: true, note: newNote };
 }
 
 export async function deleteNote(userId: string, noteId: string): Promise<boolean> {
+  // Optimistic removal from cache (0ms)
+  if (cache.notes[userId]) {
+    cache.notes[userId].data = cache.notes[userId].data.filter((n) => n.id !== noteId);
+  }
+
   if (isSupabaseConfigured && userId && !noteId.startsWith('local-')) {
     try {
       const { error } = await supabase
@@ -699,7 +898,7 @@ export async function deleteNote(userId: string, noteId: string): Promise<boolea
   }
 
   const notes = getLocal<Note[]>(LS_NOTES, []);
-  const filtered = notes.filter(n => n.id !== noteId);
+  const filtered = notes.filter((n) => n.id !== noteId);
   setLocal(LS_NOTES, filtered);
   return true;
 }
@@ -708,37 +907,51 @@ export async function deleteNote(userId: string, noteId: string): Promise<boolea
 // FILES API
 // ----------------------------------------------------------------------
 export async function fetchStudyFiles(userId: string): Promise<StudyFile[]> {
-  if (isSupabaseConfigured && userId) {
-    try {
-      const { data, error } = await supabase
-        .from('study_files')
-        .select(`
-          id,
-          user_id,
-          subject_id,
-          section_id,
-          topic_id,
-          filename,
-          storage_path,
-          file_type,
-          file_size,
-          created_at
-        `)
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
-
-      if (!error && data) {
-        return data.map((f: any) => ({
-          ...f,
-          subject_name: f.subject_id || '',
-        }));
-      }
-    } catch (err) {
-      console.error('Error fetching files:', err);
-    }
+  if (cache.studyFiles[userId] && Date.now() - cache.studyFiles[userId].ts < CACHE_TTL_MS) {
+    return cache.studyFiles[userId].data;
   }
 
-  return getLocal<StudyFile[]>(LS_FILES, []);
+  if (isSupabaseConfigured && userId) {
+    return dedup(`studyFiles_${userId}`, async () => {
+      try {
+        const { data, error } = await supabase
+          .from('study_files')
+          .select(`
+            id,
+            user_id,
+            subject_id,
+            section_id,
+            topic_id,
+            filename,
+            storage_path,
+            file_type,
+            file_size,
+            created_at
+          `)
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          const files = data.map((f: any) => ({
+            ...f,
+            subject_name: f.subject_id || '',
+          }));
+          cache.studyFiles[userId] = { data: files, ts: Date.now() };
+          setLocal(LS_FILES, files);
+          return files;
+        }
+      } catch (err) {
+        console.error('Error fetching files:', err);
+      }
+      const local = getLocal<StudyFile[]>(LS_FILES, []);
+      cache.studyFiles[userId] = { data: local, ts: Date.now() };
+      return local;
+    });
+  }
+
+  const local = getLocal<StudyFile[]>(LS_FILES, []);
+  cache.studyFiles[userId] = { data: local, ts: Date.now() };
+  return local;
 }
 
 export async function uploadStudyFile(
@@ -788,15 +1001,19 @@ export async function uploadStudyFile(
 
       if (dbError) throw dbError;
 
-      return {
-        success: true,
-        file: {
-          ...dbData,
-          subject_name: subjectName || subjectId || '',
-          section_name: sectionName || '',
-          topic_name: topicName || '',
-        },
+      const newFile: StudyFile = {
+        ...dbData,
+        subject_name: subjectName || subjectId || '',
+        section_name: sectionName || '',
+        topic_name: topicName || '',
       };
+
+      // Add to in-memory cache
+      if (cache.studyFiles[userId]) {
+        cache.studyFiles[userId].data.unshift(newFile);
+      }
+
+      return { success: true, file: newFile };
     } catch (err: any) {
       console.error('Upload failed:', err);
       return { success: false, error: err?.message || 'Could not upload file.' };
@@ -822,6 +1039,9 @@ export async function uploadStudyFile(
   };
   files.unshift(newFile);
   setLocal(LS_FILES, files);
+  if (cache.studyFiles[userId]) {
+    cache.studyFiles[userId].data.unshift(newFile);
+  }
   return { success: true, file: newFile };
 }
 
@@ -835,6 +1055,24 @@ export async function linkFileToTopic(
   topicId?: string | null,
   topicName?: string
 ): Promise<{ success: boolean; file?: StudyFile; error?: string }> {
+  // Optimistically update cache (0ms)
+  if (cache.studyFiles[userId]) {
+    cache.studyFiles[userId].data = cache.studyFiles[userId].data.map((f) => {
+      if (f.id === fileId) {
+        return {
+          ...f,
+          subject_id: subjectId || null,
+          subject_name: subjectName || subjectId || f.subject_name,
+          section_id: sectionId || null,
+          section_name: sectionName || f.section_name,
+          topic_id: topicId || null,
+          topic_name: topicName || f.topic_name,
+        };
+      }
+      return f;
+    });
+  }
+
   if (isSupabaseConfigured && userId && !fileId.startsWith('local-')) {
     try {
       const { data, error } = await supabase
@@ -893,6 +1131,11 @@ export async function deleteStudyFile(
   fileId: string,
   storagePath: string
 ): Promise<{ success: boolean; error?: string }> {
+  // Optimistically remove from cache (0ms)
+  if (cache.studyFiles[userId]) {
+    cache.studyFiles[userId].data = cache.studyFiles[userId].data.filter((f) => f.id !== fileId);
+  }
+
   if (isSupabaseConfigured && userId && !fileId.startsWith('local-')) {
     try {
       // 1. Delete from Supabase Storage first
@@ -945,6 +1188,10 @@ export async function getFileDownloadUrl(storagePath: string): Promise<string | 
 // PROFILE API
 // ----------------------------------------------------------------------
 export async function fetchProfile(userId: string): Promise<Profile> {
+  if (cache.profile[userId] && Date.now() - cache.profile[userId].ts < CACHE_TTL_MS) {
+    return cache.profile[userId].data;
+  }
+
   const defaultProfile: Profile = {
     id: userId || 'demo-user',
     full_name: 'Aspirant',
@@ -954,25 +1201,36 @@ export async function fetchProfile(userId: string): Promise<Profile> {
   };
 
   if (isSupabaseConfigured && userId) {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+    return dedup(`profile_${userId}`, async () => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
 
-      if (!error && data) {
-        return data as Profile;
+        if (!error && data) {
+          cache.profile[userId] = { data: data as Profile, ts: Date.now() };
+          return data as Profile;
+        }
+      } catch (err) {
+        console.error('Error fetching profile:', err);
       }
-    } catch (err) {
-      console.error('Error fetching profile:', err);
-    }
+      cache.profile[userId] = { data: defaultProfile, ts: Date.now() };
+      return defaultProfile;
+    });
   }
 
-  return getLocal<Profile>(LS_PROFILE, defaultProfile);
+  const p = getLocal<Profile>(LS_PROFILE, defaultProfile);
+  cache.profile[userId] = { data: p, ts: Date.now() };
+  return p;
 }
 
 export async function updateProfileData(userId: string, profile: Partial<Profile>): Promise<boolean> {
+  if (cache.profile[userId]) {
+    cache.profile[userId].data = { ...cache.profile[userId].data, ...profile };
+  }
+
   if (isSupabaseConfigured && userId) {
     try {
       const { error } = await supabase
