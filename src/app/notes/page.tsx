@@ -55,7 +55,14 @@ function NotesContent() {
       setLoading(false);
 
       if (initialNew) {
-        handleNewNote();
+        setCurrentNote({
+          title: "",
+          subject_id: subjectsData[0]?.id || "",
+          topic: "",
+          content: "",
+        });
+        setErrorMsg("");
+        setIsEditing(true);
       }
     });
   }, [user, initialNew]);
@@ -332,7 +339,7 @@ function NotesContent() {
                   No notes found
                 </Typography>
                 <Typography variant="small" className="text-gray-400 text-xs mt-1">
-                  Click "+ New Note" to start writing your personal study notes.
+                  Click &ldquo;+ New Note&rdquo; to start writing your personal study notes.
                 </Typography>
               </Card>
             ) : (

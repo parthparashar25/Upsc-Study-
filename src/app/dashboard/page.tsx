@@ -324,7 +324,7 @@ export default function DashboardPage() {
               UPSC Study Tracker
             </Typography>
             <Typography variant="small" className="text-gray-500 font-medium mt-0.5">
-              Today's Study &bull; {formatDisplayDate(selectedDate)}
+              Today&apos;s Study &bull; {formatDisplayDate(selectedDate)}
             </Typography>
           </div>
 
@@ -361,7 +361,7 @@ export default function DashboardPage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <Typography variant="small" color="blue-gray" className="font-bold uppercase tracking-wider text-xs">
-                    Today's Habits
+                    Today&apos;s Habits
                   </Typography>
                   <Typography variant="h6" color="blue-gray" className="font-bold">
                     {habitsProgressPercent}%
@@ -742,7 +742,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-blue-gray-50">
               <div>
                 <Typography variant="h6" color="blue-gray" className="font-bold text-sm">
-                  Today's Subject Habits
+                  Today&apos;s Subject Habits
                 </Typography>
                 <Typography variant="small" className="text-gray-500 text-xs font-normal">
                   Check subjects studied today. Updates immediately.
