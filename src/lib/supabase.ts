@@ -1,14 +1,18 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Read from Next.js environment variables or localStorage
+// Live Supabase configuration defaults
+const DEFAULT_URL = 'https://qdbuxofhmfkzbdudjsse.supabase.co';
+const DEFAULT_KEY = 'sb_publishable_Kumn4EUultC0x8htUFpXQg_tcgPbRXT';
+
+// Read from Next.js environment variables or localStorage or defaults
 const envUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const envKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 const storedUrl = typeof window !== 'undefined' ? localStorage.getItem('upsc_supabase_url') || '' : '';
 const storedKey = typeof window !== 'undefined' ? localStorage.getItem('upsc_supabase_key') || '' : '';
 
-export const supabaseUrl = (storedUrl || envUrl).trim();
-export const supabaseAnonKey = (storedKey || envKey).trim();
+export const supabaseUrl = (storedUrl || envUrl || DEFAULT_URL).trim();
+export const supabaseAnonKey = (storedKey || envKey || DEFAULT_KEY).trim();
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl &&
@@ -18,12 +22,9 @@ export const isSupabaseConfigured = Boolean(
   !supabaseAnonKey.includes('your-anon-key')
 );
 
-const dummyUrl = 'https://placeholder-project.supabase.co';
-const dummyKey = 'placeholder-key-00000000000000000000000000000000';
-
 export const supabase: SupabaseClient = createClient(
-  isSupabaseConfigured ? supabaseUrl : dummyUrl,
-  isSupabaseConfigured ? supabaseAnonKey : dummyKey,
+  supabaseUrl,
+  supabaseAnonKey,
   {
     auth: {
       persistSession: true,
