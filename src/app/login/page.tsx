@@ -25,6 +25,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useAuth } from "@/context/AuthContext";
 import { isSupabaseConfigured, saveCustomSupabaseConfig } from "@/lib/supabase";
+import { SocialAuthButtons } from "@/components/SocialAuthButtons";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -182,6 +183,9 @@ export default function LoginPage() {
               </div>
             </div>
           )}
+
+          {/* Google & iOS Apple Sign In */}
+          <SocialAuthButtons mode="signin" onError={(err) => setErrorMsg(err)} />
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">

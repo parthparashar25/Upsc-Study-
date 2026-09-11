@@ -27,6 +27,8 @@ interface AuthContextType {
   signUp: (usernameOrEmail: string, password: string, fullName: string, optionalSubject?: string, customUsername?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: Error | null }>;
+  signInWithGoogle: () => Promise<{ error: Error | null }>;
+  signInWithApple: () => Promise<{ error: Error | null }>;
   signInWithBiometrics: () => Promise<{ success: boolean; error?: string }>;
   enableBiometrics: (password: string) => Promise<{ success: boolean; error?: string }>;
   disableBiometrics: () => void;
@@ -245,6 +247,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // OAuth methods
+  const signInWithGoogle = async () => {
+    try {
+      const redirectUrl = typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : '';
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+        },
+      });
+      return { error: error ? new Error(error.message) : null };
+    } catch (err: any) {
+      return { error: new Error(err.message || 'Google sign in failed') };
+    }
+  };
+
+  const signInWithApple = async () => {
+    try {
+      const redirectUrl = typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : '';
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'apple',
+        options: {
+          redirectTo: redirectUrl,
+        },
+      });
+      return { error: error ? new Error(error.message) : null };
+    } catch (err: any) {
+      return { error: new Error(err.message || 'Apple sign in failed') };
+    }
+  };
+
   // Biometric methods
   const signInWithBiometrics = async (): Promise<{ success: boolean; error?: string }> => {
     const res = await authenticateWithBiometrics();
@@ -316,6 +349,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signUp,
         signOut,
         resetPassword,
+        signInWithGoogle,
+        signInWithApple,
         signInWithBiometrics,
         enableBiometrics,
         disableBiometrics,

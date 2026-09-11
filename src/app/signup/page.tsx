@@ -15,6 +15,7 @@ import {
   CheckCircleIcon,
 } from "@heroicons/react/24/outline";
 import { useAuth } from "@/context/AuthContext";
+import { SocialAuthButtons } from "@/components/SocialAuthButtons";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -109,6 +110,9 @@ export default function SignupPage() {
               <span>{successMsg}</span>
             </div>
           )}
+
+          {/* Google & iOS Apple Sign In */}
+          <SocialAuthButtons mode="signup" onError={(err) => setErrorMsg(err)} />
 
           <form onSubmit={handleSubmit} className="space-y-3.5">
             <div>
