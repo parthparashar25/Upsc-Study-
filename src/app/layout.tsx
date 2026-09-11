@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Roboto } from "next/font/google";
 import { Layout } from "@/components/Layout";
 import { AuthProvider } from "@/context/AuthContext";
+import { ThemeProvider } from "@/context/ThemeContext";
 import { Analytics } from "@vercel/analytics/react";
 
 const roboto = Roboto({
@@ -34,12 +35,14 @@ export default function RootLayout({
           referrerPolicy="no-referrer"
         />
       </head>
-      <body className={roboto.className}>
-        <AuthProvider>
-          <Layout>
-            {children}
-          </Layout>
-        </AuthProvider>
+      <body className={`${roboto.className} transition-colors duration-200 bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100`}>
+        <ThemeProvider>
+          <AuthProvider>
+            <Layout>
+              {children}
+            </Layout>
+          </AuthProvider>
+        </ThemeProvider>
         <Analytics />
       </body>
     </html>

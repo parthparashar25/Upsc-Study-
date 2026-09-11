@@ -2,9 +2,16 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured, normalizeUserIdentifier, getDisplayUsername } from '@/lib/supabase';
 import { Profile } from '@/types/database';
 import { fetchProfile, updateProfileData } from '@/lib/api';
+import {
+  isBiometricsSupported,
+  getStoredBiometrics,
+  clearStoredBiometrics,
+  registerBiometricCredential,
+  authenticateWithBiometrics,
+} from '@/lib/biometrics';
 
 const LS_DEMO_USER = 'upsc_demo_user';
 
@@ -14,10 +21,15 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   isDemo: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName: string, optionalSubject?: string) => Promise<{ error: Error | null }>;
+  isBiometricsAvailable: boolean;
+  hasBiometrics: boolean;
+  signIn: (usernameOrEmail: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (usernameOrEmail: string, password: string, fullName: string, optionalSubject?: string, customUsername?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: Error | null }>;
+  signInWithBiometrics: () => Promise<{ success: boolean; error?: string }>;
+  enableBiometrics: (password: string) => Promise<{ success: boolean; error?: string }>;
+  disableBiometrics: () => void;
   refreshProfile: () => Promise<void>;
   updateProfile: (data: Partial<Profile>) => Promise<boolean>;
   setDemoMode: (enable: boolean) => void;
@@ -31,11 +43,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDemo, setIsDemo] = useState(!isSupabaseConfigured);
+  const [isBiometricsAvailable, setIsBiometricsAvailable] = useState(false);
+  const [hasBiometrics, setHasBiometrics] = useState(false);
 
-  // Initialize auth state
+  // Initialize auth state & biometric capabilities
   useEffect(() => {
+    isBiometricsSupported().then((avail) => {
+      setIsBiometricsAvailable(avail);
+      setHasBiometrics(Boolean(getStoredBiometrics()));
+    });
+
     if (!isSupabaseConfigured) {
-      // Check if user previously signed in via demo session in localStorage
       try {
         const storedDemo = localStorage.getItem(LS_DEMO_USER);
         if (storedDemo) {
@@ -93,22 +111,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return false;
     const ok = await updateProfileData(user.id, data);
     if (ok) {
-      setProfile(prev => (prev ? { ...prev, ...data } : null));
+      setProfile((prev) => (prev ? { ...prev, ...data } : null));
     }
     return ok;
   };
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (usernameOrEmail: string, password: string) => {
+    const identifier = normalizeUserIdentifier(usernameOrEmail);
+    const displayUser = getDisplayUsername(usernameOrEmail);
+
     if (!isSupabaseConfigured) {
       const demoUser: any = {
         id: 'demo-user-123',
-        email,
-        user_metadata: { full_name: email.split('@')[0] },
+        email: identifier,
+        user_metadata: { full_name: displayUser },
       };
       const demoProfile: Profile = {
         id: 'demo-user-123',
-        full_name: email.split('@')[0],
-        email,
+        full_name: displayUser,
+        email: identifier,
         optional_subject: 'Anthropology',
         daily_study_target: 4,
       };
@@ -124,24 +145,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { error } = await supabase.auth.signInWithPassword({
+        email: identifier,
+        password,
+      });
       return { error: error ? new Error(error.message) : null };
     } catch (err: any) {
       return { error: new Error(err.message || 'Login failed') };
     }
   };
 
-  const signUp = async (email: string, password: string, fullName: string, optionalSubject?: string) => {
+  const signUp = async (
+    usernameOrEmail: string,
+    password: string,
+    fullName: string,
+    optionalSubject?: string,
+    customUsername?: string
+  ) => {
+    const identifier = normalizeUserIdentifier(customUsername || usernameOrEmail);
+    const displayName = fullName || getDisplayUsername(customUsername || usernameOrEmail);
+
     if (!isSupabaseConfigured) {
       const demoUser: any = {
         id: `user-${Date.now()}`,
-        email,
-        user_metadata: { full_name: fullName },
+        email: identifier,
+        user_metadata: { full_name: displayName },
       };
       const demoProfile: Profile = {
         id: demoUser.id,
-        full_name: fullName,
-        email,
+        full_name: displayName,
+        email: identifier,
         optional_subject: optionalSubject || 'General',
         daily_study_target: 4,
       };
@@ -158,12 +191,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: identifier,
         password,
         options: {
           data: {
-            full_name: fullName,
+            full_name: displayName,
             optional_subject: optionalSubject || '',
+            username: customUsername || getDisplayUsername(usernameOrEmail),
           },
         },
       });
@@ -171,9 +205,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) return { error: new Error(error.message) };
 
       if (data.user) {
-        // Ensure profile exists immediately
         await updateProfileData(data.user.id, {
-          full_name: fullName,
+          full_name: displayName,
           optional_subject: optionalSubject || '',
           daily_study_target: 4,
         });
@@ -204,11 +237,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { error: null };
     }
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email);
+      const identifier = normalizeUserIdentifier(email);
+      const { error } = await supabase.auth.resetPasswordForEmail(identifier);
       return { error: error ? new Error(error.message) : null };
     } catch (err: any) {
       return { error: new Error(err.message || 'Password reset failed') };
     }
+  };
+
+  // Biometric methods
+  const signInWithBiometrics = async (): Promise<{ success: boolean; error?: string }> => {
+    const res = await authenticateWithBiometrics();
+    if (!res.success || !res.userIdentifier || !res.userSecretToken) {
+      return { success: false, error: res.error || 'Biometric authentication failed.' };
+    }
+
+    const { error } = await signIn(res.userIdentifier, res.userSecretToken);
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  };
+
+  const enableBiometrics = async (password: string): Promise<{ success: boolean; error?: string }> => {
+    const activeIdentifier = user?.email || profile?.email;
+    if (!activeIdentifier) {
+      return { success: false, error: 'Must be logged in to register biometrics.' };
+    }
+    const res = await registerBiometricCredential(activeIdentifier, password);
+    if (res.success) {
+      setHasBiometrics(true);
+    }
+    return res;
+  };
+
+  const disableBiometrics = () => {
+    clearStoredBiometrics();
+    setHasBiometrics(false);
   };
 
   const setDemoMode = (enable: boolean) => {
@@ -245,10 +310,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         profile,
         loading,
         isDemo,
+        isBiometricsAvailable,
+        hasBiometrics,
         signIn,
         signUp,
         signOut,
         resetPassword,
+        signInWithBiometrics,
+        enableBiometrics,
+        disableBiometrics,
         refreshProfile,
         updateProfile,
         setDemoMode,
