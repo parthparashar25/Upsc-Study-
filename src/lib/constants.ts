@@ -195,3 +195,82 @@ export const FILE_FILTER_CATEGORIES = [
   'Optional',
   'Other',
 ];
+
+// ----------------------------------------------------------------------
+// TARGETED UPSC ATTEMPT CONSTANTS (23-05-2027 SUNDAY)
+// ----------------------------------------------------------------------
+export const TARGET_EXAM_DATE = '2027-05-23';
+export const TARGET_EXAM_TIME = '09:30:00'; // 9:30 AM IST (Prelims Paper I start time)
+export const TARGET_EXAM_NAME = 'UPSC Civil Services Examination (Prelims 2027)';
+export const TARGET_EXAM_DISPLAY = '23-05-2027 SUNDAY | 23rd May 2027';
+
+export interface ExamCountdown {
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+  totalDays: number;
+  weeks: number;
+  isPast: boolean;
+}
+
+export function getTimeRemainingToTargetExam(targetDateStr = TARGET_EXAM_DATE): ExamCountdown {
+  const target = new Date(`${targetDateStr}T${TARGET_EXAM_TIME}`);
+  const now = new Date();
+  const diffMs = target.getTime() - now.getTime();
+
+  if (diffMs <= 0) {
+    return {
+      days: 0,
+      hours: 0,
+      minutes: 0,
+      seconds: 0,
+      totalDays: 0,
+      weeks: 0,
+      isPast: true,
+    };
+  }
+
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const seconds = totalSeconds % 60;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const minutes = totalMinutes % 60;
+  const totalHours = Math.floor(totalMinutes / 60);
+  const hours = totalHours % 24;
+  const days = Math.floor(totalHours / 24);
+  const weeks = Math.floor(days / 7);
+
+  return {
+    days,
+    hours,
+    minutes,
+    seconds,
+    totalDays: days,
+    weeks,
+    isPast: false,
+  };
+}
+
+export const PREPARATION_PHASES = [
+  {
+    phase: 1,
+    name: 'Portion Coverage & Foundation',
+    target: '100% Syllabus Coverage (NCERTs + Standard Reference Textbooks)',
+    status: 'In Progress',
+    badge: 'Phase 1',
+  },
+  {
+    phase: 2,
+    name: 'Consolidated Revision & Sectional PYQs',
+    target: '1st & 2nd Consolidated Revision + 10-Year Subject-wise PYQs',
+    status: 'Upcoming',
+    badge: 'Phase 2',
+  },
+  {
+    phase: 3,
+    name: 'Rapid Revision & Mock Marathon',
+    target: '3rd Rapid Revision Sprint + 30 Full-Length Mocks & CSAT Drills',
+    status: 'Final 90 Days',
+    badge: 'Phase 3',
+  },
+];

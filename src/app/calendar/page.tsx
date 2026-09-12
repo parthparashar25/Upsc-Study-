@@ -28,7 +28,14 @@ import {
   fetchSubjects,
 } from "@/lib/api";
 import { DailyStats, Note, Subject } from "@/types/database";
-import { formatDisplayDate, formatDateToIso } from "@/lib/constants";
+import {
+  formatDisplayDate,
+  formatDateToIso,
+  TARGET_EXAM_DATE,
+  TARGET_EXAM_NAME,
+  TARGET_EXAM_DISPLAY,
+} from "@/lib/constants";
+import { ExamCountdownTimer } from "@/components/ExamCountdownTimer";
 
 export default function CalendarPage() {
   const { user, profile } = useAuth();
@@ -116,27 +123,38 @@ export default function CalendarPage() {
         {/* Header & Navigation */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-blue-gray-100 pb-4">
           <div>
-            <Typography variant="h4" color="blue-gray" className="font-bold tracking-tight">
+            <Typography variant="h4" color="blue-gray" className="font-bold tracking-tight dark:text-white">
               Study Calendar
             </Typography>
-            <Typography variant="small" className="text-gray-500 font-medium mt-0.5">
-              Review your monthly consistency, study duration, and revisions
+            <Typography variant="small" className="text-gray-500 dark:text-gray-400 font-medium mt-0.5">
+              Review your monthly consistency, study duration, and target countdown
             </Typography>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                setDateObj(new Date(2027, 4, 1)); // May 2027
+                setSelectedDate(TARGET_EXAM_DATE);
+              }}
+              className="flex items-center gap-1.5 normal-case font-bold text-xs py-1.5 px-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 border border-emerald-500/60 shadow-xs hover:bg-slate-800 dark:hover:bg-slate-100"
+            >
+              <span>🎯 Target Exam: 23 May 2027</span>
+            </Button>
+
             <Button
               variant="outlined"
               size="sm"
               color="blue-gray"
               onClick={prevMonth}
-              className="flex items-center gap-1 normal-case text-xs font-semibold py-1.5 px-3 border-blue-gray-200"
+              className="flex items-center gap-1 normal-case text-xs font-semibold py-1.5 px-2.5 border-blue-gray-200 dark:border-gray-700 dark:text-gray-300"
             >
               <ChevronLeftIcon className="w-3.5 h-3.5" />
-              <span>&lt; Previous Month</span>
+              <span>Prev</span>
             </Button>
 
-            <Typography variant="small" color="blue-gray" className="font-bold text-xs min-w-[120px] text-center">
+            <Typography variant="small" color="blue-gray" className="font-bold text-xs min-w-[110px] text-center dark:text-white">
               {monthName}
             </Typography>
 
@@ -145,9 +163,9 @@ export default function CalendarPage() {
               size="sm"
               color="blue-gray"
               onClick={nextMonth}
-              className="flex items-center gap-1 normal-case text-xs font-semibold py-1.5 px-3 border-blue-gray-200"
+              className="flex items-center gap-1 normal-case text-xs font-semibold py-1.5 px-2.5 border-blue-gray-200 dark:border-gray-700 dark:text-gray-300"
             >
-              <span>Next Month &gt;</span>
+              <span>Next</span>
               <ChevronRightIcon className="w-3.5 h-3.5" />
             </Button>
           </div>
@@ -193,6 +211,7 @@ export default function CalendarPage() {
                     return <div key={`empty-${idx}`} className="h-16 rounded" />;
                   }
 
+                  const isTargetExamDate = dateStr === TARGET_EXAM_DATE;
                   const isSelected = dateStr === selectedDate;
                   const isToday = dateStr === todayIso;
                   const dayNum = parseInt(dateStr.split("-")[2], 10);
@@ -203,36 +222,66 @@ export default function CalendarPage() {
                   const hasActivity = count > 0 || hours > 0 || (summary?.pyqCount || 0) > 0;
                   const isComplete = count >= 4 || hours >= targetHours;
 
-                  let cellStyle = "bg-white hover:bg-blue-gray-50/50 border-blue-gray-200 text-blue-gray-800";
-                  if (isComplete) {
-                    cellStyle = "bg-gray-900 text-white border-gray-900 hover:bg-gray-800";
+                  let cellStyle = "bg-white dark:bg-gray-900 hover:bg-blue-gray-50/50 dark:hover:bg-gray-800 border-blue-gray-200 dark:border-gray-700 text-blue-gray-800 dark:text-gray-200";
+                  if (isTargetExamDate) {
+                    cellStyle = "bg-gradient-to-br from-emerald-950/20 via-slate-900 to-slate-950 text-white border-2 border-emerald-500 shadow-md";
+                  } else if (isComplete) {
+                    cellStyle = "bg-gray-900 dark:bg-gray-800 text-white border-gray-900 dark:border-gray-700 hover:bg-gray-800";
                   } else if (hasActivity) {
-                    cellStyle = "bg-blue-gray-100/70 border-blue-gray-300 text-blue-gray-900 hover:bg-blue-gray-200/60";
+                    cellStyle = "bg-blue-gray-100/70 dark:bg-gray-800/60 border-blue-gray-300 dark:border-gray-700 text-blue-gray-900 dark:text-gray-200 hover:bg-blue-gray-200/60";
                   }
 
                   return (
                     <button
                       key={dateStr}
                       onClick={() => setSelectedDate(dateStr)}
-                      className={`h-16 p-2 rounded-lg border flex flex-col justify-between text-left transition-all ${cellStyle} ${
-                        isSelected ? "ring-2 ring-gray-900 ring-offset-1" : ""
+                      className={`h-16 p-2 rounded-lg border flex flex-col justify-between text-left transition-all relative group ${cellStyle} ${
+                        isSelected ? "ring-2 ring-emerald-500 ring-offset-1" : ""
                       }`}
                     >
                       <div className="flex items-center justify-between w-full">
-                        <span className={`text-xs font-bold ${isComplete ? "text-white" : isToday ? "underline font-extrabold text-blue-gray-900" : ""}`}>
+                        <span className={`text-xs font-bold ${isTargetExamDate ? "text-emerald-400 font-black text-sm" : isComplete ? "text-white" : isToday ? "underline font-extrabold text-blue-gray-900 dark:text-white" : ""}`}>
                           {dayNum}
                         </span>
-                        {isToday && (
-                          <span className={`text-[9px] px-1 rounded font-semibold ${isComplete ? "bg-gray-800 text-gray-200" : "bg-blue-gray-200 text-blue-gray-800"}`}>
+                        {isTargetExamDate ? (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded font-black bg-emerald-500 text-slate-950 shadow-xs">
+                            🎯 2027
+                          </span>
+                        ) : isToday ? (
+                          <span className={`text-[9px] px-1 rounded font-semibold ${isComplete ? "bg-gray-800 text-gray-200" : "bg-blue-gray-200 dark:bg-gray-700 text-blue-gray-800 dark:text-gray-200"}`}>
                             Today
                           </span>
-                        )}
+                        ) : null}
                       </div>
 
-                      {hasActivity && (
+                      {isTargetExamDate ? (
+                        <div className="text-[10px] font-black text-emerald-400 tracking-tight truncate w-full">
+                          PRELIMS SUNDAY
+                        </div>
+                      ) : hasActivity ? (
                         <div className="text-[10px] font-medium truncate w-full">
                           {hours > 0 ? `${hours}h ` : ""}
                           {count > 0 ? `✓${count}` : ""}
+                        </div>
+                      ) : null}
+
+                      {/* HOVER POPOVER FOR 23-05-2027 SUNDAY */}
+                      {isTargetExamDate && (
+                        <div className="opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all duration-200 z-50 absolute -top-36 left-1/2 -translate-x-1/2 w-64 p-3 rounded-xl bg-slate-950 text-white border border-emerald-500 shadow-2xl space-y-1.5 text-left">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-emerald-400">🎯 Target Exam Day</span>
+                            <span className="text-[9px] bg-emerald-500/20 text-emerald-300 font-mono px-1.5 py-0.5 rounded">Prelims 2027</span>
+                          </div>
+                          <p className="text-xs font-bold text-white leading-tight">
+                            UPSC Civil Services Examination
+                          </p>
+                          <p className="text-[11px] text-slate-300 font-semibold">
+                            23-05-2027 SUNDAY | 23rd May 2027
+                          </p>
+                          <div className="text-[10px] text-emerald-300 bg-emerald-950/80 p-1.5 rounded border border-emerald-800/80">
+                            Target: 100% Portion Mastery &bull; 3x Rapid Revision &bull; 10 Years PYQs
+                          </div>
+                          <div className="absolute left-1/2 -bottom-1.5 -translate-x-1/2 w-3 h-3 bg-slate-950 border-r border-b border-emerald-500 rotate-45" />
                         </div>
                       )}
                     </button>
@@ -243,16 +292,36 @@ export default function CalendarPage() {
           </Card>
 
           {/* Selected Date Information Pane (1 col) */}
-          <Card className="border border-blue-gray-100 shadow-sm">
+          <Card className="border border-blue-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
             <CardBody className="p-5 space-y-4">
-              <div className="border-b border-blue-gray-50 pb-3">
-                <Typography variant="small" className="text-[10px] font-bold uppercase tracking-wider text-blue-gray-400">
+              <div className="border-b border-blue-gray-50 dark:border-gray-800 pb-3">
+                <Typography variant="small" className="text-[10px] font-bold uppercase tracking-wider text-blue-gray-400 dark:text-gray-400">
                   Day Summary
                 </Typography>
-                <Typography variant="h6" color="blue-gray" className="font-bold text-sm mt-0.5">
+                <Typography variant="h6" color="blue-gray" className="font-bold text-sm mt-0.5 dark:text-white">
                   {formatDisplayDate(selectedDate)}
                 </Typography>
               </div>
+
+              {/* Special Target Exam Card */}
+              {selectedDate === TARGET_EXAM_DATE && (
+                <div className="p-3.5 rounded-xl bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 text-white border border-emerald-500/80 space-y-2.5 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🎯</span>
+                    <div>
+                      <h4 className="text-xs font-bold text-emerald-400">Targeted UPSC Attempt</h4>
+                      <p className="text-[11px] text-white font-bold">{TARGET_EXAM_DISPLAY}</p>
+                    </div>
+                  </div>
+                  <ExamCountdownTimer variant="compact" showDateBadge={false} />
+                  <Link
+                    href="/portion"
+                    className="block text-center text-xs font-bold py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 transition-colors shadow-xs"
+                  >
+                    Open Portion Tracker &amp; Rapid Revision &rarr;
+                  </Link>
+                </div>
+              )}
 
               {/* Metrics */}
               <div className="grid grid-cols-3 gap-2 text-center">

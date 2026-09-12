@@ -26,6 +26,7 @@ import {
   SunIcon,
   MoonIcon,
   FingerPrintIcon,
+  ChartBarSquareIcon,
 } from "@heroicons/react/24/outline";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -59,6 +60,7 @@ export function AppLayout({ children, title, subtitle }: AppLayoutProps) {
   const mainNavItems = [
     { name: "Dashboard", href: "/dashboard", icon: Squares2X2Icon },
     { name: "Habits", href: "/habits", icon: ClipboardDocumentCheckIcon },
+    { name: "Portion", href: "/portion", icon: ChartBarSquareIcon },
     { name: "Syllabus", href: "/syllabus", icon: BookOpenIcon },
     { name: "Reference Books", href: "/books", icon: BuildingLibraryIcon },
     { name: "Calendar", href: "/calendar", icon: CalendarDaysIcon },

@@ -329,12 +329,25 @@ export async function fetchSyllabusStatistics(userId: string): Promise<{
   prelims.percent = prelims.total > 0 ? Math.round((prelims.completed / prelims.total) * 100) : 0;
   mains.percent = mains.total > 0 ? Math.round((mains.completed / mains.total) * 100) : 0;
 
-  Object.keys(subjectStats).forEach((sId) => {
-    const s = subjectStats[sId];
-    s.percent = s.total > 0 ? Math.round((s.completed / s.total) * 100) : 0;
+  let totalRevisionsCount = 0;
+  let totalPyqsCount = 0;
+  let totalStudySessionsCount = 0;
+
+  Object.values(progressMap).forEach((prog) => {
+    if (prog.study_completed) totalStudySessionsCount++;
+    if (prog.revision_completed) totalRevisionsCount++;
+    if (prog.pyq_completed) totalPyqsCount++;
   });
 
-  const result = { overall, prelims, mains, subjectStats };
+  const result = {
+    overall,
+    prelims,
+    mains,
+    subjectStats,
+    totalRevisionsCount,
+    totalPyqsCount,
+    totalStudySessionsCount,
+  };
   cache.syllabusStats[userId] = { data: result, ts: Date.now() };
   return result;
 }
