@@ -36,6 +36,7 @@ export default function LoginPage() {
     signIn,
     resetPassword,
     signInWithBiometrics,
+    enableBiometrics,
     hasBiometrics,
     isBiometricsAvailable,
   } = useAuth();
@@ -43,6 +44,8 @@ export default function LoginPage() {
   const [usernameOrEmail, setUsernameOrEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isForgot, setIsForgot] = useState(false);
+  const [enrollBiometricsOnLogin, setEnrollBiometricsOnLogin] = useState(true);
+  const [autoPromptAttempted, setAutoPromptAttempted] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [biometricLoading, setBiometricLoading] = useState(false);
@@ -60,6 +63,32 @@ export default function LoginPage() {
       router.push("/dashboard");
     }
   }, [user, loading, router]);
+
+  // Auto-prompt biometrics if already enrolled on this device
+  useEffect(() => {
+    if (hasBiometrics && !loading && !user && !autoPromptAttempted) {
+      setAutoPromptAttempted(true);
+      handleBiometricLogin(true);
+    }
+  }, [hasBiometrics, loading, user, autoPromptAttempted]);
+
+  const handleBiometricLogin = async (isAutoPrompt = false) => {
+    setBiometricLoading(true);
+    if (!isAutoPrompt) setErrorMsg("");
+    try {
+      const res = await signInWithBiometrics();
+      setBiometricLoading(false);
+      if (res.success) {
+        router.push("/dashboard");
+      } else {
+        if (!isAutoPrompt) {
+          setErrorMsg(res.error || "Biometric authentication failed. Please try again or sign in with your password.");
+        }
+      }
+    } catch {
+      setBiometricLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,28 +119,25 @@ export default function LoginPage() {
     }
 
     const { error } = await signIn(usernameOrEmail.trim(), password);
-    setSubmitting(false);
 
     if (error) {
+      setSubmitting(false);
       setErrorMsg(
         error.message.includes("Invalid login")
           ? "Invalid username/email or password."
           : error.message || "Login failed. Please try again."
       );
     } else {
+      // If user chose to enroll biometrics on this device
+      if (enrollBiometricsOnLogin && isBiometricsAvailable && !hasBiometrics) {
+        try {
+          await enableBiometrics(password);
+        } catch (bioErr) {
+          console.error("Auto biometric enrollment on login error:", bioErr);
+        }
+      }
+      setSubmitting(false);
       router.push("/dashboard");
-    }
-  };
-
-  const handleBiometricLogin = async () => {
-    setBiometricLoading(true);
-    setErrorMsg("");
-    const res = await signInWithBiometrics();
-    setBiometricLoading(false);
-    if (res.success) {
-      router.push("/dashboard");
-    } else {
-      setErrorMsg(res.error || "Biometric authentication failed.");
     }
   };
 
@@ -164,26 +190,43 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Biometric Quick Login (if enrolled or supported) */}
-          {hasBiometrics && (
-            <div className="mb-5">
+          {/* Biometric Quick Login (when enrolled) */}
+          {hasBiometrics ? (
+            <div className="mb-5 p-4 rounded-2xl border-2 border-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-950/30 text-center space-y-2.5 shadow-xs">
+              <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center mx-auto shadow-md shadow-emerald-600/20">
+                <FingerPrintIcon className="w-6 h-6 animate-pulse" />
+              </div>
+              <div>
+                <Typography variant="h6" className="text-xs font-bold text-gray-900 dark:text-white">
+                  {getBiometricPlatformName()} Ready
+                </Typography>
+                <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">
+                  1-touch instant unlock enabled on this device
+                </p>
+              </div>
               <Button
-                variant="outlined"
                 fullWidth
-                onClick={handleBiometricLogin}
+                onClick={() => handleBiometricLogin(false)}
                 disabled={biometricLoading || submitting}
-                className="flex items-center justify-center gap-2 py-2.5 border-emerald-500 text-emerald-700 dark:text-emerald-400 dark:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 normal-case font-bold text-xs"
+                className="flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs normal-case"
               >
-                <FingerPrintIcon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                <span>{biometricLoading ? "Verifying Sensor..." : `Unlock with ${getBiometricPlatformName()}`}</span>
+                <FingerPrintIcon className="w-4 h-4" />
+                <span>{biometricLoading ? "Waiting for sensor..." : `Unlock with ${getBiometricPlatformName().split(" ")[0]}`}</span>
               </Button>
-              <div className="flex items-center my-3">
-                <div className="grow border-t border-gray-200 dark:border-gray-800" />
-                <span className="px-2 text-[11px] text-gray-400 uppercase tracking-wider">or sign in with password</span>
-                <div className="grow border-t border-gray-200 dark:border-gray-800" />
+              <div className="flex items-center my-1 pt-1">
+                <div className="grow border-t border-emerald-200 dark:border-emerald-900" />
+                <span className="px-2 text-[10px] text-emerald-700 dark:text-emerald-400 uppercase tracking-wider font-semibold">or sign in with password</span>
+                <div className="grow border-t border-emerald-200 dark:border-emerald-900" />
               </div>
             </div>
-          )}
+          ) : isBiometricsAvailable ? (
+            <div className="mb-4 p-2.5 rounded-xl border border-emerald-500/30 bg-emerald-50/40 dark:bg-emerald-950/20 flex items-center gap-2.5 text-xs">
+              <FingerPrintIcon className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <div className="text-[11px] text-gray-700 dark:text-gray-300 leading-snug">
+                <strong>{getBiometricPlatformName()}</strong> is supported on this device. Sign in once below to enable 1-touch unlock.
+              </div>
+            </div>
+          ) : null}
 
           {/* Google & iOS Apple Sign In */}
           <SocialAuthButtons mode="signin" onError={(err) => setErrorMsg(err)} />
@@ -226,6 +269,25 @@ export default function LoginPage() {
                   placeholder="••••••••"
                   className="w-full bg-white dark:bg-gray-800 border border-blue-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-xs font-semibold text-blue-gray-900 dark:text-white focus:outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-xs"
                 />
+              </div>
+            )}
+
+            {!isForgot && isBiometricsAvailable && !hasBiometrics && (
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="enableBioCheckbox"
+                  checked={enrollBiometricsOnLogin}
+                  onChange={(e) => setEnrollBiometricsOnLogin(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 cursor-pointer"
+                />
+                <label
+                  htmlFor="enableBioCheckbox"
+                  className="text-[11px] text-gray-700 dark:text-gray-300 flex items-center gap-1.5 cursor-pointer select-none"
+                >
+                  <FingerPrintIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Enable {getBiometricPlatformName()} for future logins</span>
+                </label>
               </div>
             )}
 

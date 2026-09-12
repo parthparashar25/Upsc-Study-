@@ -26,6 +26,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { getBiometricPlatformName } from "@/lib/biometrics";
+import { getDisplayUsername } from "@/lib/supabase";
 import {
   UPSC_OPTIONAL_CORE_SUBJECTS,
   UPSC_OPTIONAL_LITERATURE_SUBJECTS,
@@ -47,6 +48,9 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
 
   const [fullName, setFullName] = useState(profile?.full_name || "");
+  const [username, setUsername] = useState(
+    profile?.username || user?.user_metadata?.username || (profile?.email ? getDisplayUsername(profile.email) : "")
+  );
   const [optionalSubject, setOptionalSubject] = useState(profile?.optional_subject || "");
   const [dailyTarget, setDailyTarget] = useState<number>(profile?.daily_study_target || 4);
 
@@ -89,26 +93,49 @@ export default function SettingsPage() {
   useEffect(() => {
     if (profile) {
       setFullName(profile.full_name || "");
+      if (profile.username) {
+        setUsername(profile.username);
+      } else if (user?.user_metadata?.username) {
+        setUsername(user.user_metadata.username);
+      } else if (profile.email) {
+        setUsername(getDisplayUsername(profile.email));
+      }
       setOptionalSubject(profile.optional_subject || "");
       setDailyTarget(profile.daily_study_target || 4);
     }
-  }, [profile]);
+  }, [profile, user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setStatusMsg(null);
 
+    const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "");
+    if (username.trim() && cleanUsername.length < 3) {
+      setSaving(false);
+      setStatusMsg({
+        type: "error",
+        text: "Username must be at least 3 characters (letters, numbers, '.', '_', '-').",
+      });
+      return;
+    }
+
     const ok = await updateProfile({
       full_name: fullName.trim(),
+      username: cleanUsername,
       optional_subject: optionalSubject.trim(),
       daily_study_target: Math.max(1, Math.min(24, Number(dailyTarget) || 4)),
     });
 
     setSaving(false);
     if (ok) {
-      setStatusMsg({ type: "success", text: "Settings saved successfully." });
-      setTimeout(() => setStatusMsg(null), 3000);
+      setStatusMsg({
+        type: "success",
+        text: cleanUsername
+          ? `Settings saved! Your username is @${cleanUsername}.`
+          : "Settings saved successfully.",
+      });
+      setTimeout(() => setStatusMsg(null), 3500);
     } else {
       setStatusMsg({ type: "error", text: "Could not save settings. Please try again." });
     }
@@ -189,8 +216,34 @@ export default function SettingsPage() {
               </div>
 
               <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-blue-gray-700 dark:text-gray-300">
+                    Username
+                  </label>
+                  <span className="text-[10px] text-gray-400">
+                    Sign in handle without email
+                  </span>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs select-none">
+                    @
+                  </span>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ""))}
+                    placeholder="e.g. parth or ias_parth"
+                    className="w-full pl-8 pr-3 py-2 text-xs border border-blue-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:border-gray-900 dark:focus:border-gray-400 font-semibold bg-white dark:bg-gray-800 dark:text-white"
+                  />
+                </div>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                  Set or change your personal handle. You can sign in using either this username (@{username || "username"}) or your email.
+                </p>
+              </div>
+
+              <div>
                 <label className="block text-xs font-bold text-blue-gray-700 dark:text-gray-300 mb-1">
-                  Account Identifier
+                  Account Identifier (Email)
                 </label>
                 <input
                   type="text"

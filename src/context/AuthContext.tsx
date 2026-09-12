@@ -114,13 +114,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const ok = await updateProfileData(user.id, data);
     if (ok) {
       setProfile((prev) => (prev ? { ...prev, ...data } : null));
+      if (data.username && isSupabaseConfigured) {
+        try {
+          await supabase.auth.updateUser({
+            data: { username: data.username.toLowerCase() },
+          });
+        } catch (e) {
+          console.error("Error updating auth user metadata:", e);
+        }
+      }
     }
     return ok;
   };
 
   const signIn = async (usernameOrEmail: string, password: string) => {
-    const identifier = normalizeUserIdentifier(usernameOrEmail);
+    let identifier = normalizeUserIdentifier(usernameOrEmail);
     const displayUser = getDisplayUsername(usernameOrEmail);
+
+    // If username without '@' is provided, check if mapped to a custom email
+    if (!usernameOrEmail.includes('@')) {
+      const clean = usernameOrEmail.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+      if (typeof window !== 'undefined') {
+        const localMapped = localStorage.getItem(`upsc_user_email_${clean}`);
+        if (localMapped) {
+          identifier = localMapped;
+        }
+      }
+      if (isSupabaseConfigured && identifier.endsWith('@upsc.local')) {
+        try {
+          const { data: matched } = await supabase
+            .from('profiles')
+            .select('email')
+            .eq('username', clean)
+            .maybeSingle();
+          if (matched?.email) {
+            identifier = matched.email;
+          }
+        } catch {
+          // fallback to normalized virtual identifier
+        }
+      }
+    }
 
     if (!isSupabaseConfigured) {
       const demoUser: any = {

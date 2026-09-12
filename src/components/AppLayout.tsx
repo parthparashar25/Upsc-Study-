@@ -209,7 +209,7 @@ export function AppLayout({ children, title, subtitle }: AppLayoutProps) {
               {profile?.full_name || "UPSC Aspirant"}
             </Typography>
             <Typography variant="small" className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
-              {profile?.email || user?.email || "aspirant@upsc"}
+              {profile?.username ? `@${profile.username}` : profile?.email || user?.email || "aspirant@upsc"}
             </Typography>
           </div>
           <div className="flex items-center gap-1">

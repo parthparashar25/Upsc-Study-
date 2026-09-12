@@ -1304,10 +1304,16 @@ export async function fetchProfile(userId: string): Promise<Profile> {
   const defaultProfile: Profile = {
     id: userId || 'demo-user',
     full_name: 'Aspirant',
+    username: 'aspirant',
     email: 'aspirant@upsc.test',
     optional_subject: 'General',
     daily_study_target: 4,
   };
+
+  const localSavedUsername =
+    typeof window !== 'undefined'
+      ? localStorage.getItem(`upsc_custom_username_${userId}`)
+      : null;
 
   if (isSupabaseConfigured && userId) {
     return dedup(`profile_${userId}`, async () => {
@@ -1319,11 +1325,18 @@ export async function fetchProfile(userId: string): Promise<Profile> {
           .maybeSingle();
 
         if (!error && data) {
-          cache.profile[userId] = { data: data as Profile, ts: Date.now() };
-          return data as Profile;
+          const prof = data as Profile;
+          if (!prof.username && localSavedUsername) {
+            prof.username = localSavedUsername;
+          }
+          cache.profile[userId] = { data: prof, ts: Date.now() };
+          return prof;
         }
       } catch (err) {
         console.error('Error fetching profile:', err);
+      }
+      if (localSavedUsername) {
+        defaultProfile.username = localSavedUsername;
       }
       cache.profile[userId] = { data: defaultProfile, ts: Date.now() };
       return defaultProfile;
@@ -1331,6 +1344,9 @@ export async function fetchProfile(userId: string): Promise<Profile> {
   }
 
   const p = getLocal<Profile>(LS_PROFILE, defaultProfile);
+  if (localSavedUsername && !p.username) {
+    p.username = localSavedUsername;
+  }
   cache.profile[userId] = { data: p, ts: Date.now() };
   return p;
 }
@@ -1340,19 +1356,45 @@ export async function updateProfileData(userId: string, profile: Partial<Profile
     cache.profile[userId].data = { ...cache.profile[userId].data, ...profile };
   }
 
+  // Persist username mapping for immediate sign-in with username on this browser
+  if (typeof window !== 'undefined' && profile.username) {
+    const cleanUser = profile.username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+    localStorage.setItem(`upsc_custom_username_${userId}`, cleanUser);
+    const activeEmail = profile.email || cache.profile[userId]?.data?.email;
+    if (activeEmail) {
+      localStorage.setItem(`upsc_user_email_${cleanUser}`, activeEmail);
+    }
+  }
+
   if (isSupabaseConfigured && userId) {
     try {
+      const updatePayload: any = {
+        full_name: profile.full_name,
+        optional_subject: profile.optional_subject,
+        daily_study_target: profile.daily_study_target,
+        updated_at: new Date().toISOString(),
+      };
+      if (profile.username !== undefined) {
+        updatePayload.username = profile.username;
+      }
+
       const { error } = await supabase
         .from('profiles')
-        .update({
-          full_name: profile.full_name,
-          optional_subject: profile.optional_subject,
-          daily_study_target: profile.daily_study_target,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq('id', userId);
 
-      if (error) throw error;
+      if (error) {
+        // Handle gracefully if Supabase profiles table hasn't added username column yet
+        if (
+          error.message?.includes('column "username" of relation "profiles" does not exist') ||
+          error.code === '42703'
+        ) {
+          delete updatePayload.username;
+          await supabase.from('profiles').update(updatePayload).eq('id', userId);
+        } else {
+          throw error;
+        }
+      }
       return true;
     } catch (err) {
       console.error('Error updating profile:', err);
@@ -1363,6 +1405,7 @@ export async function updateProfileData(userId: string, profile: Partial<Profile
   const existing = getLocal<Profile>(LS_PROFILE, {
     id: userId || 'demo-user',
     full_name: 'Aspirant',
+    username: 'aspirant',
     email: 'aspirant@upsc.test',
     optional_subject: 'General',
     daily_study_target: 4,
