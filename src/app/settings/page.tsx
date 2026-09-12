@@ -24,6 +24,7 @@ import {
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
+import { getBiometricPlatformName } from "@/lib/biometrics";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -231,10 +232,10 @@ export default function SettingsPage() {
               <div>
                 <Typography variant="h6" color="blue-gray" className="font-bold text-sm flex items-center gap-2 dark:text-white">
                   <FingerPrintIcon className="w-5 h-5 text-gray-700 dark:text-gray-300" />
-                  <span>Fingerprint &amp; Biometric Login</span>
+                  <span>{getBiometricPlatformName()}</span>
                 </Typography>
                 <Typography variant="small" className="text-gray-500 dark:text-gray-400 text-xs mt-1 max-w-md">
-                  Enable fast, 1-touch sign in using your device&apos;s fingerprint reader, Touch ID, or Windows Hello.
+                  Enable fast, 1-touch sign in using your device&apos;s Apple Touch ID / Face ID, Windows Hello, or Fingerprint sensor.
                 </Typography>
               </div>
 
@@ -264,7 +265,7 @@ export default function SettingsPage() {
                     className="flex items-center gap-1.5 normal-case font-bold text-xs py-2 px-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900"
                   >
                     <FingerPrintIcon className="w-4 h-4" />
-                    <span>Set Up Fingerprint</span>
+                    <span>Set Up {getBiometricPlatformName().split(" ")[0]}</span>
                   </Button>
                 )}
               </div>
@@ -311,7 +312,7 @@ export default function SettingsPage() {
         <form onSubmit={handleEnrollBiometrics}>
           <DialogBody className="space-y-4">
             <p className="text-xs text-gray-600 dark:text-gray-300">
-              Please confirm your account password. Your browser will then prompt your fingerprint scanner or Windows Hello to register this device.
+              Please confirm your account password. Your browser will prompt {getBiometricPlatformName()} to register this device securely.
             </p>
             {bioError && (
               <div className="p-2.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg text-xs text-red-700 dark:text-red-400">

@@ -3,6 +3,7 @@ import {
   BookImportance,
   BookReadingStatus,
   DailyStats,
+  DailyTopicLog,
   HabitCompletion,
   Note,
   Profile,
@@ -26,6 +27,7 @@ const LS_FILES = `${LS_PREFIX}files`;
 const LS_PROFILE = `${LS_PREFIX}profile`;
 const LS_TOPIC_PROGRESS = `${LS_PREFIX}topic_progress`;
 const LS_BOOKS = `${LS_PREFIX}reference_books`;
+const LS_DAILY_LOGS = `${LS_PREFIX}daily_topic_logs`;
 
 function getLocal<T>(key: string, fallback: T): T {
   try {
@@ -53,6 +55,7 @@ const cache = {
   topicProgress: {} as Record<string, { data: Record<string, TopicProgress>; ts: number }>,
   habits: {} as Record<string, { data: Record<string, boolean>; ts: number }>,
   dailyStats: {} as Record<string, { data: DailyStats; ts: number }>,
+  dailyTopicLogs: {} as Record<string, { data: DailyTopicLog[]; ts: number }>,
   monthSummary: {} as Record<string, { data: Record<string, DaySummary>; ts: number }>,
   notes: {} as Record<string, { data: Note[]; ts: number }>,
   studyFiles: {} as Record<string, { data: StudyFile[]; ts: number }>,
@@ -1646,5 +1649,154 @@ export async function deleteCustomBook(userId: string, bookId: string): Promise<
   state.customBooks = (state.customBooks || []).filter((b) => b.id !== bookId);
   delete state.userOverrides[bookId];
   await savePersistedBooksState(userId, state, noteId);
+  return true;
+}
+
+// ----------------------------------------------------------------------
+// DAILY TOPIC LOGS API (Granular Combined Study Tracking)
+// ----------------------------------------------------------------------
+
+export async function fetchDailyTopicLogs(userId: string, dateStr: string): Promise<DailyTopicLog[]> {
+  const cacheKey = `${userId}_${dateStr}`;
+  if (cache.dailyTopicLogs?.[cacheKey] && Date.now() - cache.dailyTopicLogs[cacheKey].ts < CACHE_TTL_MS) {
+    return cache.dailyTopicLogs[cacheKey].data;
+  }
+
+  if (isSupabaseConfigured && userId) {
+    try {
+      const { data, error } = await supabase
+        .from('notes')
+        .select('id, content')
+        .eq('user_id', userId)
+        .eq('title', `__upsc_daily_logs__${dateStr}`)
+        .maybeSingle();
+
+      if (!error && data?.content) {
+        try {
+          const logs = JSON.parse(data.content);
+          if (Array.isArray(logs)) {
+            if (!cache.dailyTopicLogs) cache.dailyTopicLogs = {};
+            cache.dailyTopicLogs[cacheKey] = { data: logs, ts: Date.now() };
+            return logs;
+          }
+        } catch {}
+      }
+    } catch (err) {
+      console.warn('Error fetching daily topic logs from Supabase:', err);
+    }
+  }
+
+  const allLogs = getLocal<Record<string, DailyTopicLog[]>>(LS_DAILY_LOGS, {});
+  const logs = allLogs[dateStr] || [];
+  if (!cache.dailyTopicLogs) cache.dailyTopicLogs = {};
+  cache.dailyTopicLogs[cacheKey] = { data: logs, ts: Date.now() };
+  return logs;
+}
+
+export async function logTopicStudySession(
+  userId: string,
+  logData: Omit<DailyTopicLog, 'id' | 'created_at'>
+): Promise<DailyTopicLog> {
+  const newLog: DailyTopicLog = {
+    ...logData,
+    id: `topic-log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    created_at: new Date().toISOString(),
+  };
+
+  const dateStr = logData.date;
+  const cacheKey = `${userId}_${dateStr}`;
+
+  // Update in-memory cache
+  const currentLogs = await fetchDailyTopicLogs(userId, dateStr);
+  const updatedLogs = [newLog, ...currentLogs];
+  if (!cache.dailyTopicLogs) cache.dailyTopicLogs = {};
+  cache.dailyTopicLogs[cacheKey] = { data: updatedLogs, ts: Date.now() };
+
+  // Update local storage
+  const allLogs = getLocal<Record<string, DailyTopicLog[]>>(LS_DAILY_LOGS, {});
+  allLogs[dateStr] = updatedLogs;
+  setLocal(LS_DAILY_LOGS, allLogs);
+
+  // Sync to Supabase topic progress
+  await updateTopicProgress(userId, logData.topic_id, {
+    study_completed: logData.study_completed,
+    revision_completed: logData.revision_completed,
+    pyq_completed: logData.pyq_completed,
+    notes: logData.notes,
+  });
+
+  // Sync to Supabase daily notes
+  if (isSupabaseConfigured && userId) {
+    try {
+      const { data: existing } = await supabase
+        .from('notes')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('title', `__upsc_daily_logs__${dateStr}`)
+        .maybeSingle();
+
+      if (existing?.id) {
+        await supabase
+          .from('notes')
+          .update({
+            content: JSON.stringify(updatedLogs),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id);
+      } else {
+        await supabase.from('notes').insert({
+          user_id: userId,
+          title: `__upsc_daily_logs__${dateStr}`,
+          topic: 'Daily Topic Logs',
+          content: JSON.stringify(updatedLogs),
+        });
+      }
+    } catch (err) {
+      console.warn('Error saving daily topic log to Supabase:', err);
+    }
+  }
+
+  return newLog;
+}
+
+export async function deleteDailyTopicLog(
+  userId: string,
+  logId: string,
+  dateStr: string
+): Promise<boolean> {
+  const currentLogs = await fetchDailyTopicLogs(userId, dateStr);
+  const updatedLogs = currentLogs.filter((l) => l.id !== logId);
+  const cacheKey = `${userId}_${dateStr}`;
+
+  if (!cache.dailyTopicLogs) cache.dailyTopicLogs = {};
+  cache.dailyTopicLogs[cacheKey] = { data: updatedLogs, ts: Date.now() };
+
+  const allLogs = getLocal<Record<string, DailyTopicLog[]>>(LS_DAILY_LOGS, {});
+  allLogs[dateStr] = updatedLogs;
+  setLocal(LS_DAILY_LOGS, allLogs);
+
+  if (isSupabaseConfigured && userId) {
+    try {
+      const { data: existing } = await supabase
+        .from('notes')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('title', `__upsc_daily_logs__${dateStr}`)
+        .maybeSingle();
+
+      if (existing?.id) {
+        await supabase
+          .from('notes')
+          .update({
+            content: JSON.stringify(updatedLogs),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id);
+      }
+    } catch (err) {
+      console.warn('Error deleting daily topic log from Supabase:', err);
+    }
+  }
+
   return true;
 }

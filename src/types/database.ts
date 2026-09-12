@@ -79,6 +79,23 @@ export interface HabitCompletion {
   updated_at?: string;
 }
 
+export interface DailyTopicLog {
+  id: string;
+  user_id: string;
+  date: string;
+  subject_id: string;
+  subject_name: string;
+  section_name: string;
+  topic_id: string;
+  topic_name: string;
+  study_completed: boolean;
+  revision_completed: boolean;
+  pyq_completed: boolean;
+  minutes_spent: number;
+  notes?: string;
+  created_at: string;
+}
+
 export interface DailyStats {
   id?: string;
   user_id: string;

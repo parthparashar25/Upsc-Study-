@@ -240,6 +240,33 @@ export const MASTER_SYLLABUS: MasterSyllabusSubject[] = [
             "display_order": 4
           }
         ]
+      },
+      {
+        "id": "sec-pre-hist-culture",
+        "name": "Indian Heritage, Art & Culture",
+        "display_order": 5,
+        "topics": [
+          { "id": "top-pre-hist-culture-1-architecture", "name": "Architecture (Rock-Cut, Stupas, Cave Art, Temples & Indo-Islamic)", "display_order": 1 },
+          { "id": "top-pre-hist-culture-2-sculpture", "name": "Sculpture & Pottery (Harappan, Gandhara, Mathura, Amravati, Bronzes)", "display_order": 2 },
+          { "id": "top-pre-hist-culture-3-paintings", "name": "Indian Paintings (Murals, Miniatures - Mughal, Rajasthani, Pahari, Folk)", "display_order": 3 },
+          { "id": "top-pre-hist-culture-4-literature", "name": "Classical & Medieval Literature (Vedas, Epics, Sangam, Persian & Vernacular)", "display_order": 4 },
+          { "id": "top-pre-hist-culture-5-music-dance", "name": "Indian Classical Music & Dances (Hindustani, Carnatic, 8 Classical Dances)", "display_order": 5 },
+          { "id": "top-pre-hist-culture-6-theatre-puppetry", "name": "Traditional Theatre, Puppetry & Martial Arts", "display_order": 6 },
+          { "id": "top-pre-hist-culture-7-philosophy", "name": "Six Schools of Indian Philosophy, Buddhism & Jainism", "display_order": 7 },
+          { "id": "top-pre-hist-culture-8-unesco", "name": "UNESCO Tangible & Intangible Cultural Heritage of India", "display_order": 8 }
+        ]
+      },
+      {
+        "id": "sec-pre-hist-world",
+        "name": "World History",
+        "display_order": 6,
+        "topics": [
+          { "id": "top-pre-hist-world-1-revolutions", "name": "Renaissance, Enlightenment, American & French Revolutions", "display_order": 1 },
+          { "id": "top-pre-hist-world-2-industrial-rev", "name": "Industrial Revolution, Capitalism, Socialism & Colonialism", "display_order": 2 },
+          { "id": "top-pre-hist-world-3-ww1-interwar", "name": "World War I, Russian Revolution & League of Nations", "display_order": 3 },
+          { "id": "top-pre-hist-world-4-ww2-nazism", "name": "Fascism, Nazism, World War II & Decolonization", "display_order": 4 },
+          { "id": "top-pre-hist-world-5-cold-war", "name": "Cold War, Non-Aligned Movement & Disintegration of USSR", "display_order": 5 }
+        ]
       }
     ]
   },
@@ -1362,7 +1389,7 @@ export const MASTER_SYLLABUS: MasterSyllabusSubject[] = [
   },
   {
     "id": "subj-pre-csat",
-    "name": "CSAT",
+    "name": "CSAT (General Studies Paper II)",
     "exam": "Prelims",
     "paper": "General",
     "display_order": 8,
@@ -1370,103 +1397,65 @@ export const MASTER_SYLLABUS: MasterSyllabusSubject[] = [
     "sections": [
       {
         "id": "sec-pre-csat-rc",
-        "name": "Reading Comprehension",
+        "name": "Comprehension",
         "display_order": 1,
         "topics": [
-          {
-            "id": "top-pre-csat-rc-1-reading-comprehension",
-            "name": "Reading Comprehension",
-            "display_order": 1
-          }
+          { "id": "top-pre-csat-rc-1-rc-short", "name": "Short & Medium Passages", "display_order": 1 },
+          { "id": "top-pre-csat-rc-2-rc-critical", "name": "Critical Reasoning & Inferences", "display_order": 2 },
+          { "id": "top-pre-csat-rc-3-rc-assumption", "name": "Assumptions & Main Ideas", "display_order": 3 }
         ]
       },
       {
-        "id": "sec-pre-csat-num",
-        "name": "Basic Numeracy & Data Interpretation",
+        "id": "sec-pre-csat-interpersonal",
+        "name": "Interpersonal Skills & Communication",
         "display_order": 2,
         "topics": [
-          {
-            "id": "top-pre-csat-num-1-basic-numeracy",
-            "name": "Basic Numeracy",
-            "display_order": 1
-          },
-          {
-            "id": "top-pre-csat-num-2-number-system",
-            "name": "Number System",
-            "display_order": 2
-          },
-          {
-            "id": "top-pre-csat-num-3-percentage",
-            "name": "Percentage",
-            "display_order": 3
-          },
-          {
-            "id": "top-pre-csat-num-4-profit-loss",
-            "name": "Profit & Loss",
-            "display_order": 4
-          },
-          {
-            "id": "top-pre-csat-num-5-ratio-proportion",
-            "name": "Ratio & Proportion",
-            "display_order": 5
-          },
-          {
-            "id": "top-pre-csat-num-6-average",
-            "name": "Average",
-            "display_order": 6
-          },
-          {
-            "id": "top-pre-csat-num-7-time-work",
-            "name": "Time & Work",
-            "display_order": 7
-          },
-          {
-            "id": "top-pre-csat-num-8-time-speed-distance",
-            "name": "Time Speed Distance",
-            "display_order": 8
-          },
-          {
-            "id": "top-pre-csat-num-9-simple-compound-interest",
-            "name": "Simple & Compound Interest",
-            "display_order": 9
-          },
-          {
-            "id": "top-pre-csat-num-10-data-interpretation",
-            "name": "Data Interpretation",
-            "display_order": 10
-          },
-          {
-            "id": "top-pre-csat-num-11-data-sufficiency",
-            "name": "Data Sufficiency",
-            "display_order": 11
-          }
+          { "id": "top-pre-csat-interpersonal-1", "name": "Communication Dynamics", "display_order": 1 },
+          { "id": "top-pre-csat-interpersonal-2", "name": "Interpersonal Conflict & Teamwork", "display_order": 2 }
         ]
       },
       {
         "id": "sec-pre-csat-reasoning",
-        "name": "Reasoning & Problem Solving",
+        "name": "Logical Reasoning & Analytical Ability",
         "display_order": 3,
         "topics": [
-          {
-            "id": "top-pre-csat-reasoning-1-logical-reasoning",
-            "name": "Logical Reasoning",
-            "display_order": 1
-          },
-          {
-            "id": "top-pre-csat-reasoning-2-analytical-ability",
-            "name": "Analytical Ability",
-            "display_order": 2
-          },
-          {
-            "id": "top-pre-csat-reasoning-3-decision-making",
-            "name": "Decision Making",
-            "display_order": 3
-          },
-          {
-            "id": "top-pre-csat-reasoning-4-problem-solving",
-            "name": "Problem Solving",
-            "display_order": 4
-          }
+          { "id": "top-pre-csat-reasoning-1-logical-reasoning", "name": "Syllogisms, Deductions & Statements", "display_order": 1 },
+          { "id": "top-pre-csat-reasoning-2-analytical-ability", "name": "Seating Arrangement & Blood Relations", "display_order": 2 },
+          { "id": "top-pre-csat-reasoning-3-coding-series", "name": "Coding-Decoding, Series & Sequences", "display_order": 3 },
+          { "id": "top-pre-csat-reasoning-4-clocks-calendars", "name": "Directions, Clocks, Calendars & Puzzles", "display_order": 4 }
+        ]
+      },
+      {
+        "id": "sec-pre-csat-decision",
+        "name": "Decision-Making & Problem-Solving",
+        "display_order": 4,
+        "topics": [
+          { "id": "top-pre-csat-decision-1", "name": "Administrative & Ethical Dilemmas", "display_order": 1 },
+          { "id": "top-pre-csat-decision-2", "name": "Problem Evaluation & Priority Setting", "display_order": 2 }
+        ]
+      },
+      {
+        "id": "sec-pre-csat-num",
+        "name": "Basic Numeracy (Class X Level)",
+        "display_order": 5,
+        "topics": [
+          { "id": "top-pre-csat-num-2-number-system", "name": "Number System, Divisibility, LCM & HCF", "display_order": 1 },
+          { "id": "top-pre-csat-num-3-percentage", "name": "Percentages & Fractions", "display_order": 2 },
+          { "id": "top-pre-csat-num-4-profit-loss", "name": "Profit, Loss & Discount", "display_order": 3 },
+          { "id": "top-pre-csat-num-5-ratio-proportion", "name": "Ratio, Proportion & Partnerships", "display_order": 4 },
+          { "id": "top-pre-csat-num-6-average", "name": "Averages, Ages & Mixtures", "display_order": 5 },
+          { "id": "top-pre-csat-num-7-time-work", "name": "Time, Work, Pipes & Cisterns", "display_order": 6 },
+          { "id": "top-pre-csat-num-8-time-speed-distance", "name": "Speed, Distance, Trains & Boats", "display_order": 7 },
+          { "id": "top-pre-csat-num-9-permutation-comb", "name": "Permutations, Combinations & Probability", "display_order": 8 }
+        ]
+      },
+      {
+        "id": "sec-pre-csat-di",
+        "name": "Data Interpretation & Sufficiency",
+        "display_order": 6,
+        "topics": [
+          { "id": "top-pre-csat-num-10-data-interpretation", "name": "Charts, Graphs, Tables & Pie Charts", "display_order": 1 },
+          { "id": "top-pre-csat-num-11-data-sufficiency", "name": "Data Sufficiency Statements", "display_order": 2 }
         ]
       }
     ]

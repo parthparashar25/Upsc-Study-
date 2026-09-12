@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Typography,
   Card,
@@ -11,7 +11,6 @@ import {
   Dialog,
   DialogHeader,
   DialogBody,
-  DialogFooter,
 } from "@/components/ui/Modal";
 import {
   MagnifyingGlassIcon,
@@ -21,29 +20,34 @@ import {
   XMarkIcon,
   FolderIcon,
   ArrowTopRightOnSquareIcon,
-  ArrowUpTrayIcon,
-  LinkIcon,
   DocumentTextIcon,
   CheckCircleIcon,
-  ExclamationTriangleIcon,
-  PlusIcon,
   FolderOpenIcon,
+  AcademicCapIcon,
+  SparklesIcon,
 } from "@heroicons/react/24/outline";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
-import { MASTER_SYLLABUS, MasterSyllabusSubject, getAllTopics } from "@/lib/syllabus-data";
-import { ExamCategory, PaperType, StudyFile, SyllabusTopic } from "@/types/database";
+import { MASTER_SYLLABUS, getAllTopics } from "@/lib/syllabus-data";
+import { StudyFile, SyllabusTopic } from "@/types/database";
 import {
   fetchStudyFiles,
   linkFileToTopic,
   getFileDownloadUrl,
 } from "@/lib/api";
-import { formatFileSize, ALLOWED_EXTENSIONS } from "@/lib/constants";
+import {
+  formatFileSize,
+  UPSC_OPTIONAL_CORE_SUBJECTS,
+  UPSC_OPTIONAL_LITERATURE_SUBJECTS,
+} from "@/lib/constants";
+
+type SyllabusTab = "prelims" | "mains" | "optional";
 
 export default function SyllabusPage() {
   const { user } = useAuth();
-  const [selectedExam, setSelectedExam] = useState<ExamCategory>("Prelims");
+  const [activeTab, setActiveTab] = useState<SyllabusTab>("prelims");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [selectedFocus, setSelectedFocus] = useState<"all" | "prelims" | "mains">("all");
 
   // Accordion state
   const [expandedSubjects, setExpandedSubjects] = useState<Record<string, boolean>>({});
@@ -51,7 +55,6 @@ export default function SyllabusPage() {
 
   // Study files state
   const [studyFiles, setStudyFiles] = useState<StudyFile[]>([]);
-  const [loadingFiles, setLoadingFiles] = useState(false);
 
   // Active topic detail modal state
   const [activeTopic, setActiveTopic] = useState<SyllabusTopic | null>(null);
@@ -65,28 +68,32 @@ export default function SyllabusPage() {
   // Load user's study files
   useEffect(() => {
     if (!user) return;
-    setLoadingFiles(true);
     fetchStudyFiles(user.id).then((files) => {
       setStudyFiles(files);
-      setLoadingFiles(false);
     });
   }, [user]);
 
-  // Filter subjects by selected Exam
-  const examSubjects = useMemo(() => {
-    return MASTER_SYLLABUS.filter((s) => s.exam === selectedExam);
-  }, [selectedExam]);
+  // Filter subjects by selected Tab
+  const tabSubjects = useMemo(() => {
+    if (activeTab === "prelims") {
+      return MASTER_SYLLABUS.filter((s) => s.exam === "Prelims");
+    }
+    if (activeTab === "mains") {
+      return MASTER_SYLLABUS.filter((s) => s.exam === "Mains" && s.paper !== "Optional");
+    }
+    return [];
+  }, [activeTab]);
 
-  // Set first subject expanded when exam changes
+  // Set first subject expanded when tab changes
   useEffect(() => {
-    if (examSubjects.length > 0) {
-      const firstSubj = examSubjects[0];
+    if (tabSubjects.length > 0) {
+      const firstSubj = tabSubjects[0];
       setExpandedSubjects({ [firstSubj.id]: true });
       if (firstSubj.sections.length > 0) {
         setExpandedSections({ [firstSubj.sections[0].id]: true });
       }
     }
-  }, [selectedExam, examSubjects]);
+  }, [activeTab, tabSubjects]);
 
   const toggleSubject = (subjectId: string) => {
     setExpandedSubjects((prev) => ({
@@ -132,7 +139,7 @@ export default function SyllabusPage() {
   }, []);
 
   const totalMainsTopics = useMemo(() => {
-    return MASTER_SYLLABUS.filter((s) => s.exam === "Mains").reduce(
+    return MASTER_SYLLABUS.filter((s) => s.exam === "Mains" && s.paper !== "Optional").reduce(
       (sum, s) => sum + s.sections.reduce((secSum, sec) => secSum + sec.topics.length, 0),
       0
     );
@@ -160,15 +167,10 @@ export default function SyllabusPage() {
   const filteredLibraryFiles = useMemo(() => {
     if (!activeTopic) return [];
     return studyFiles.filter((file) => {
-      // Don't show files already linked to THIS topic in the available pool
       if (file.topic_id === activeTopic.id) return false;
-
-      // Filter by unlinked only if selected
       if (libraryFilter === "unlinked" && (file.topic_id || file.section_id)) {
         return false;
       }
-
-      // Search query filter
       if (librarySearchQuery) {
         const q = librarySearchQuery.toLowerCase();
         const matchName = file.filename.toLowerCase().includes(q);
@@ -177,7 +179,6 @@ export default function SyllabusPage() {
         const matchTop = (file.topic_name || "").toLowerCase().includes(q);
         if (!matchName && !matchSubj && !matchSec && !matchTop) return false;
       }
-
       return true;
     });
   }, [studyFiles, activeTopic, libraryFilter, librarySearchQuery]);
@@ -204,7 +205,6 @@ export default function SyllabusPage() {
     }
   };
 
-  // Attach a library file directly to this topic
   const handleAttachFromLibrary = async (file: StudyFile) => {
     if (!user || !activeTopic) return;
 
@@ -249,63 +249,75 @@ export default function SyllabusPage() {
       ""
     );
     setLinkingActionLoadingId(null);
-
-    if (res.success && res.file) {
+    if (res.success) {
       setStudyFiles((prev) =>
-        prev.map((f) => (f.id === res.file!.id ? { ...f, topic_id: null, topic_name: "" } : f))
+        prev.map((f) => (f.id === file.id ? { ...f, topic_id: null, topic_name: "" } : f))
       );
-      setActionSuccess(`Removed "${file.filename}" from this topic.`);
-      setTimeout(() => setActionSuccess(""), 2500);
+      setActionSuccess(`Unlinked "${file.filename}"`);
+      setTimeout(() => setActionSuccess(""), 3000);
     }
   };
 
   return (
     <AppLayout
-      title="UPSC Master Syllabus"
-      subtitle="Complete chapter and topic-level syllabus architecture for Prelims & Mains • Directly attach your library files"
+      title="UPSC Master Syllabus & Interlinked Topics"
+      subtitle="Canonical UPSC Prelims, Mains & Optional subject architecture • Integrated sub-subjects, chapters & cloud files"
     >
-      <div className="space-y-6 max-w-5xl">
-        {/* TOP CONTROLS: EXAM SELECTOR + SEARCH */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-          {/* Exam Segmented Control */}
-          <div className="inline-flex bg-blue-gray-100/70 dark:bg-gray-800 p-1 rounded-xl">
+      <div className="space-y-6 max-w-6xl mx-auto pb-12">
+        {/* TOP CONTROLS: TABS + SEARCH */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white dark:bg-gray-900 p-3.5 rounded-2xl border border-gray-200 dark:border-gray-800">
+          {/* Primary Tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
             <button
               onClick={() => {
-                setSelectedExam("Prelims");
+                setActiveTab("prelims");
                 setSearchQuery("");
               }}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                selectedExam === "Prelims" && !searchQuery
-                  ? "bg-gray-900 dark:bg-white text-white dark:text-gray-950 shadow-xs"
-                  : "text-blue-gray-700 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                activeTab === "prelims" && !searchQuery
+                  ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-xs"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
               }`}
             >
-              UPSC Prelims ({totalPrelimsTopics} Topics)
+              Prelims Papers ({totalPrelimsTopics} Topics)
             </button>
             <button
               onClick={() => {
-                setSelectedExam("Mains");
+                setActiveTab("mains");
                 setSearchQuery("");
               }}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                selectedExam === "Mains" && !searchQuery
-                  ? "bg-gray-900 dark:bg-white text-white dark:text-gray-950 shadow-xs"
-                  : "text-blue-gray-700 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                activeTab === "mains" && !searchQuery
+                  ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-xs"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
               }`}
             >
-              UPSC Mains ({totalMainsTopics} Topics)
+              Mains General Studies & Compulsory ({totalMainsTopics} Topics)
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab("optional");
+                setSearchQuery("");
+              }}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                activeTab === "optional" && !searchQuery
+                  ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-xs"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+              }`}
+            >
+              Optional Subjects (25 Core + 23 Literature)
             </button>
           </div>
 
           {/* Search Box */}
-          <div className="relative flex-1 sm:max-w-xs">
-            <MagnifyingGlassIcon className="w-4 h-4 text-blue-gray-400 dark:text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" />
+          <div className="relative flex-1 md:max-w-xs">
+            <MagnifyingGlassIcon className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search syllabus..."
-              className="w-full bg-white dark:bg-gray-900 border border-blue-gray-200 dark:border-gray-700 rounded-xl pl-9 pr-8 py-2 text-xs font-medium text-blue-gray-800 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-xs"
+              placeholder="Search chapters or topics..."
+              className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl pl-9 pr-8 py-2 text-xs font-medium text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-white"
             />
             {searchQuery && (
               <button
@@ -321,8 +333,8 @@ export default function SyllabusPage() {
         {/* SEARCH RESULTS VIEW */}
         {searchQuery.trim() !== "" ? (
           <div className="space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-blue-gray-100 dark:border-gray-800">
-              <Typography variant="small" color="blue-gray" className="font-bold text-xs dark:text-gray-200">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-200 dark:border-gray-800">
+              <Typography variant="small" className="font-bold text-xs text-gray-900 dark:text-white">
                 Search Results for &ldquo;{searchQuery}&rdquo;
               </Typography>
               <span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">
@@ -331,23 +343,22 @@ export default function SyllabusPage() {
             </div>
 
             {searchResults.length === 0 ? (
-              <div className="p-8 text-center bg-white dark:bg-gray-900 border border-blue-gray-100 dark:border-gray-800 rounded-xl text-xs text-gray-400 dark:text-gray-500">
+              <div className="p-8 text-center bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-xs text-gray-400 dark:text-gray-500">
                 No syllabus topics matching &ldquo;{searchQuery}&rdquo;.
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                 {searchResults.map((topic) => {
                   const linkedPdfs = filesByTopic[topic.id] || [];
-
                   return (
                     <div
                       key={topic.id}
                       onClick={() => openTopicDetail(topic)}
-                      className="p-3 rounded-xl bg-white dark:bg-gray-900 border border-blue-gray-100 dark:border-gray-800 hover:border-gray-900 dark:hover:border-gray-500 cursor-pointer transition-all shadow-xs flex items-center justify-between gap-3"
+                      className="p-3.5 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-gray-900 dark:hover:border-gray-500 cursor-pointer transition-all shadow-xs flex items-center justify-between gap-3"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 mb-1 text-[10px] text-gray-400 dark:text-gray-500 font-semibold uppercase">
-                          <span className="px-1.5 py-0.5 rounded bg-blue-gray-50 dark:bg-gray-800 text-blue-gray-700 dark:text-gray-300">
+                          <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
                             {topic.exam}
                           </span>
                           <span>&bull;</span>
@@ -355,18 +366,17 @@ export default function SyllabusPage() {
                         </div>
                         <Typography
                           variant="small"
-                          color="blue-gray"
-                          className="font-bold text-xs truncate dark:text-gray-100"
+                          className="font-bold text-xs truncate text-gray-900 dark:text-white"
                         >
                           {topic.name}
                         </Typography>
-                        <span className="text-[10px] text-gray-500 dark:text-gray-400 truncate block">
-                          Chapter: {topic.section_name}
+                        <span className="text-[10px] text-gray-500 dark:text-gray-400 truncate block mt-0.5">
+                          Sub-subject: {topic.section_name}
                         </span>
                       </div>
 
                       {linkedPdfs.length > 0 && (
-                        <span className="shrink-0 text-[10px] font-bold text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 px-2 py-0.5 rounded-full">
+                        <span className="shrink-0 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 px-2 py-0.5 rounded-full">
                           📕 {linkedPdfs.length} PDF{linkedPdfs.length > 1 ? "s" : ""}
                         </span>
                       )}
@@ -376,10 +386,71 @@ export default function SyllabusPage() {
               </div>
             )}
           </div>
+        ) : activeTab === "optional" ? (
+          /* OPTIONAL SUBJECTS CATALOG VIEW */
+          <div className="space-y-6">
+            <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-none">
+              <CardBody className="p-5 space-y-4">
+                <div className="flex items-center gap-2 pb-3 border-b border-gray-100 dark:border-gray-800">
+                  <AcademicCapIcon className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                  <div>
+                    <Typography variant="h6" className="font-bold text-gray-900 dark:text-white text-sm">
+                      25 Core UPSC Optional Subjects (Mains Papers VI & VII)
+                    </Typography>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Candidates may choose any one optional subject (2 papers of 250 marks each = 500 marks total)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                  {UPSC_OPTIONAL_CORE_SUBJECTS.map((opt, idx) => (
+                    <div
+                      key={opt}
+                      className="p-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-800/40 flex items-center gap-2.5 text-xs font-semibold text-gray-900 dark:text-white"
+                    >
+                      <span className="w-5 h-5 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-[10px] flex items-center justify-center shrink-0">
+                        {idx + 1}
+                      </span>
+                      <span className="truncate">{opt}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardBody>
+            </Card>
+
+            <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-none">
+              <CardBody className="p-5 space-y-4">
+                <div className="flex items-center gap-2 pb-3 border-b border-gray-100 dark:border-gray-800">
+                  <BookOpenIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  <div>
+                    <Typography variant="h6" className="font-bold text-gray-900 dark:text-white text-sm">
+                      23 UPSC Literature Optional Subjects
+                    </Typography>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Literature of Eighth Schedule languages + English
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                  {UPSC_OPTIONAL_LITERATURE_SUBJECTS.map((lit, idx) => (
+                    <div
+                      key={lit}
+                      className="p-2.5 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-800/40 text-xs font-medium text-gray-800 dark:text-gray-200"
+                    >
+                      <span className="text-gray-400 dark:text-gray-500 mr-1.5">{idx + 1}.</span>
+                      <span>{lit}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardBody>
+            </Card>
+          </div>
         ) : (
-          /* HIERARCHICAL ACCORDION VIEW: Subject -> Section -> Topic */
+          /* HIERARCHICAL ACCORDION VIEW: Subject -> Sub-Subjects (Sections) -> Topics */
           <div className="space-y-4">
-            {examSubjects.map((subject) => {
+            {tabSubjects.map((subject) => {
               const isSubjOpen = Boolean(expandedSubjects[subject.id]);
               const subjectTotalTopics = subject.sections.reduce(
                 (sum, sec) => sum + sec.topics.length,
@@ -389,28 +460,28 @@ export default function SyllabusPage() {
               return (
                 <Card
                   key={subject.id}
-                  className="border border-blue-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm overflow-hidden"
+                  className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-none overflow-hidden"
                 >
                   {/* Subject Header */}
                   <div
                     onClick={() => toggleSubject(subject.id)}
-                    className="p-4 bg-white dark:bg-gray-900 hover:bg-gray-50/50 dark:hover:bg-gray-800/40 cursor-pointer flex items-center justify-between transition-colors"
+                    className="p-4 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/40 cursor-pointer flex items-center justify-between transition-colors"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 flex items-center justify-center shrink-0">
-                        <BookOpenIcon className="w-4 h-4" />
+                      <div className="w-9 h-9 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 flex items-center justify-center shrink-0 font-bold">
+                        <BookOpenIcon className="w-5 h-5" />
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
-                          <Typography variant="h6" color="blue-gray" className="font-bold text-sm dark:text-gray-100">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Typography variant="h6" className="font-bold text-sm text-gray-900 dark:text-white">
                             {subject.name}
                           </Typography>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-gray-50 dark:bg-gray-800 text-blue-gray-700 dark:text-gray-300 border border-blue-gray-200 dark:border-gray-700">
-                            {subject.paper}
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                            {subject.exam}
                           </span>
                         </div>
-                        <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                          {subject.sections.length} Chapters &bull; {subjectTotalTopics} Topics
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                          {subject.sections.length} Sub-divisions &bull; {subjectTotalTopics} Topics & Chapters
                         </p>
                       </div>
                     </div>
@@ -424,9 +495,9 @@ export default function SyllabusPage() {
                     </div>
                   </div>
 
-                  {/* Subject Sections (Chapters) */}
+                  {/* Subject Sub-divisions (Sections) */}
                   {isSubjOpen && (
-                    <div className="border-t border-blue-gray-100 dark:border-gray-800 divide-y divide-blue-gray-50 dark:divide-gray-800 bg-blue-gray-50/20 dark:bg-gray-900/50">
+                    <div className="border-t border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800 bg-gray-50/30 dark:bg-gray-900/50">
                       {subject.sections.map((section) => {
                         const isSecOpen = Boolean(expandedSections[section.id]);
 
@@ -435,15 +506,15 @@ export default function SyllabusPage() {
                             {/* Section Header */}
                             <div
                               onClick={() => toggleSection(section.id)}
-                              className="px-4 py-2.5 flex items-center justify-between cursor-pointer hover:bg-blue-gray-50/60 dark:hover:bg-gray-800/60"
+                              className="px-4 py-2.5 flex items-center justify-between cursor-pointer hover:bg-gray-100/60 dark:hover:bg-gray-800/60"
                             >
                               <div className="flex items-center gap-2.5 min-w-0">
-                                <FolderIcon className="w-4 h-4 text-blue-gray-400 dark:text-gray-500 shrink-0" />
-                                <span className="text-xs font-bold text-blue-gray-800 dark:text-gray-200 truncate">
+                                <FolderIcon className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" />
+                                <span className="text-xs font-bold text-gray-900 dark:text-gray-100 truncate">
                                   {section.name}
                                 </span>
                                 <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">
-                                  ({section.topics.length})
+                                  ({section.topics.length} topics)
                                 </span>
                               </div>
 
@@ -456,9 +527,9 @@ export default function SyllabusPage() {
                               </div>
                             </div>
 
-                            {/* Topics List */}
+                            {/* Topics Grid */}
                             {isSecOpen && (
-                              <div className="border-t border-blue-gray-50 dark:border-gray-800 px-3.5 py-2.5 bg-gray-50/40 dark:bg-gray-900/80">
+                              <div className="border-t border-gray-100 dark:border-gray-800 px-3.5 py-2.5 bg-white dark:bg-gray-900">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                   {section.topics.map((topic, idx) => {
                                     const linkedPdfs = filesByTopic[topic.id] || [];
@@ -479,10 +550,10 @@ export default function SyllabusPage() {
                                             display_order: topic.display_order,
                                           })
                                         }
-                                        className="flex items-center justify-between gap-2 p-2 rounded-md bg-white dark:bg-gray-850 border border-blue-gray-100/80 dark:border-gray-800 hover:border-gray-900 dark:hover:border-gray-500 text-xs text-blue-gray-800 dark:text-gray-200 cursor-pointer transition-all"
+                                        className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-gray-50/70 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 hover:border-gray-900 dark:hover:border-gray-400 text-xs text-gray-900 dark:text-gray-100 cursor-pointer transition-all"
                                       >
                                         <div className="flex items-center gap-2 min-w-0">
-                                          <span className="w-5 h-5 rounded-full bg-blue-gray-50 dark:bg-gray-800 text-blue-gray-600 dark:text-gray-400 font-bold text-[10px] flex items-center justify-center shrink-0">
+                                          <span className="w-5 h-5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold text-[10px] flex items-center justify-center shrink-0">
                                             {idx + 1}
                                           </span>
                                           <span className="font-semibold truncate" title={topic.name}>
@@ -492,7 +563,7 @@ export default function SyllabusPage() {
 
                                         {linkedPdfs.length > 0 && (
                                           <span
-                                            className="shrink-0 text-[10px] font-bold text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 px-1.5 py-0.5 rounded-full"
+                                            className="shrink-0 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 rounded-full"
                                             title={`${linkedPdfs.length} study PDF(s) attached`}
                                           >
                                             📕 {linkedPdfs.length}
@@ -515,20 +586,20 @@ export default function SyllabusPage() {
           </div>
         )}
 
-        {/* TOPIC DETAIL & STUDY MATERIAL MODAL */}
+        {/* TOPIC DETAIL & ATTACH STUDY MATERIAL DIALOG */}
         <Dialog
           open={Boolean(activeTopic)}
           handler={() => setActiveTopic(null)}
           size="md"
-          className="dark:bg-gray-900 border dark:border-gray-800"
+          className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5 rounded-2xl"
         >
           {activeTopic && (
-            <div className="max-h-[85vh] flex flex-col">
+            <div className="max-h-[85vh] flex flex-col space-y-4">
               {/* Header */}
-              <DialogHeader className="text-sm font-bold text-blue-gray-900 dark:text-gray-100 border-b border-blue-gray-100 dark:border-gray-800 pb-3 flex flex-col items-start gap-1">
+              <DialogHeader className="p-0 pb-3 border-b border-gray-100 dark:border-gray-800 flex flex-col items-start gap-1">
                 <div className="flex items-center justify-between w-full">
                   <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-gray-100 dark:bg-gray-800 text-blue-gray-800 dark:text-gray-200">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
                       {activeTopic.exam}
                     </span>
                     <span className="text-xs text-gray-500 dark:text-gray-400 font-medium truncate">
@@ -539,19 +610,18 @@ export default function SyllabusPage() {
                     onClick={() => setActiveTopic(null)}
                     className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1"
                   >
-                    <XMarkIcon className="w-4 h-4" />
+                    <XMarkIcon className="w-5 h-5" />
                   </button>
                 </div>
-                <Typography variant="h5" color="blue-gray" className="font-bold text-base dark:text-gray-100">
+                <Typography variant="h5" className="font-bold text-base text-gray-900 dark:text-white">
                   {activeTopic.name}
                 </Typography>
               </DialogHeader>
 
               {/* Body */}
-              <DialogBody className="space-y-4 py-4 overflow-y-auto flex-1">
-                {/* Feedback */}
+              <DialogBody className="p-0 space-y-4 overflow-y-auto flex-1">
                 {actionSuccess && (
-                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400 animate-in fade-in">
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
                     <CheckCircleIcon className="w-4 h-4 shrink-0" />
                     <span>{actionSuccess}</span>
                   </div>
@@ -563,12 +633,12 @@ export default function SyllabusPage() {
                   </div>
                 )}
 
-                {/* STUDY MATERIAL SECTION */}
+                {/* Attached Study Material Section */}
                 <div>
                   <div className="flex items-center justify-between mb-2.5">
                     <div className="flex items-center gap-1.5">
                       <DocumentTextIcon className="w-4 h-4 text-gray-900 dark:text-white" />
-                      <Typography variant="h6" color="blue-gray" className="font-bold text-xs uppercase tracking-wider dark:text-gray-200">
+                      <Typography variant="h6" className="font-bold text-xs uppercase tracking-wider text-gray-900 dark:text-white">
                         Attached Study Material ({activeTopicFiles.length})
                       </Typography>
                     </div>
@@ -576,24 +646,23 @@ export default function SyllabusPage() {
                     <Button
                       size="sm"
                       onClick={() => setIsLibraryPickerOpen(!isLibraryPickerOpen)}
-                      className="text-[11px] font-semibold normal-case px-3 py-1.5 bg-gray-900 dark:bg-white dark:text-gray-950 hover:bg-gray-800 shadow-xs flex items-center gap-1.5"
+                      className="text-[11px] font-semibold px-3 py-1.5 bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-800 shadow-none flex items-center gap-1.5"
                     >
                       <FolderOpenIcon className="w-3.5 h-3.5" />
-                      <span>{isLibraryPickerOpen ? "Hide Library" : "+ Add from Library"}</span>
+                      <span>{isLibraryPickerOpen ? "Hide Library" : "+ Attach from Library"}</span>
                     </Button>
                   </div>
 
-                  {/* CONNECTED FILES LIST */}
                   {activeTopicFiles.length === 0 ? (
-                    <div className="p-6 text-center rounded-xl border border-dashed border-blue-gray-200 dark:border-gray-700 bg-blue-gray-50/30 dark:bg-gray-800/30">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    <div className="p-6 text-center rounded-xl border border-dashed border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
                         No study material linked to this chapter topic yet.
                       </p>
                       {!isLibraryPickerOpen && (
                         <Button
                           size="sm"
                           onClick={() => setIsLibraryPickerOpen(true)}
-                          className="bg-gray-900 dark:bg-white dark:text-gray-950 hover:bg-gray-800 normal-case font-semibold text-xs px-3.5 py-1.5"
+                          className="bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-semibold text-xs px-3.5 py-1.5 shadow-none"
                         >
                           + Pick PDF from Library
                         </Button>
@@ -604,12 +673,12 @@ export default function SyllabusPage() {
                       {activeTopicFiles.map((file) => (
                         <div
                           key={file.id}
-                          className="flex items-center justify-between p-3 rounded-xl border border-blue-gray-100 dark:border-gray-800 bg-white dark:bg-gray-850 hover:border-blue-gray-200 dark:hover:border-gray-700 shadow-xs gap-2"
+                          className="flex items-center justify-between p-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/70 gap-2"
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
                             <span className="text-xl">📕</span>
                             <div className="min-w-0">
-                              <p className="text-xs font-bold text-blue-gray-900 dark:text-gray-100 truncate" title={file.filename}>
+                              <p className="text-xs font-bold text-gray-900 dark:text-white truncate" title={file.filename}>
                                 {file.filename}
                               </p>
                               <span className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">
@@ -622,7 +691,7 @@ export default function SyllabusPage() {
                             <button
                               type="button"
                               onClick={() => handleOpenPdf(file)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-900 dark:bg-white dark:text-gray-950 hover:bg-gray-800 text-white text-xs font-semibold shadow-xs transition-colors"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-xs font-semibold shadow-xs transition-colors"
                             >
                               <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" />
                               <span>Open</span>
@@ -643,128 +712,67 @@ export default function SyllabusPage() {
                     </div>
                   )}
 
-                  {/* DIRECT LIBRARY PICKER PANEL */}
+                  {/* Direct Library Picker Panel */}
                   {isLibraryPickerOpen && (
-                    <div className="mt-4 p-4 rounded-xl border border-blue-gray-200 dark:border-gray-700 bg-blue-gray-50/50 dark:bg-gray-850 space-y-3 animate-in fade-in">
-                      <div className="flex items-center justify-between border-b border-blue-gray-100 dark:border-gray-700 pb-2">
+                    <div className="mt-4 p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 space-y-3">
+                      <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-2">
                         <div className="flex items-center gap-2">
-                          <FolderOpenIcon className="w-4 h-4 text-gray-800 dark:text-gray-200" />
-                          <span className="text-xs font-bold text-blue-gray-900 dark:text-gray-100">
-                            Pick from Your Uploaded Library
+                          <FolderOpenIcon className="w-4 h-4 text-gray-900 dark:text-white" />
+                          <span className="text-xs font-bold text-gray-900 dark:text-white">
+                            Select File from Your Cloud Library
                           </span>
                         </div>
-
-                        <div className="flex items-center gap-2">
-                          {/* Filter unlinked only */}
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setLibraryFilter(libraryFilter === "all" ? "unlinked" : "all")
-                            }
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-colors ${
-                              libraryFilter === "unlinked"
-                                ? "bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 border-amber-300"
-                                : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700"
-                            }`}
-                          >
-                            {libraryFilter === "unlinked" ? "Showing Unassigned" : "Show All"}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setIsLibraryPickerOpen(false)}
-                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                          >
-                            <XMarkIcon className="w-4 h-4" />
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => setIsLibraryPickerOpen(false)}
+                          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                        >
+                          <XMarkIcon className="w-4 h-4" />
+                        </button>
                       </div>
 
-                      {/* Search box for library */}
-                      <div className="relative">
-                        <MagnifyingGlassIcon className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          value={librarySearchQuery}
-                          onChange={(e) => setLibrarySearchQuery(e.target.value)}
-                          placeholder="Search your library PDFs..."
-                          className="w-full bg-white dark:bg-gray-900 border border-blue-gray-200 dark:border-gray-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-gray-800 dark:text-gray-200 placeholder:text-gray-400 focus:outline-none focus:border-gray-900"
-                        />
-                      </div>
+                      <input
+                        type="text"
+                        value={librarySearchQuery}
+                        onChange={(e) => setLibrarySearchQuery(e.target.value)}
+                        placeholder="Search files..."
+                        className="w-full px-3 py-1.5 text-xs bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-100"
+                      />
 
-                      {/* Library Items List */}
-                      {filteredLibraryFiles.length === 0 ? (
-                        <div className="py-6 text-center text-xs text-gray-400 dark:text-gray-500">
-                          {librarySearchQuery
-                            ? "No library files match your search."
-                            : "No other files available in your library. Upload new files in the Study Library section."}
-                        </div>
-                      ) : (
-                        <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
-                          {filteredLibraryFiles.map((file) => {
-                            const isCurrentlyProcessing = linkingActionLoadingId === file.id;
-
-                            return (
-                              <div
-                                key={file.id}
-                                className="flex items-center justify-between p-2.5 rounded-lg bg-white dark:bg-gray-900 border border-blue-gray-100 dark:border-gray-700 gap-2 hover:border-gray-400 transition-colors"
-                              >
-                                <div className="min-w-0 flex items-center gap-2">
-                                  <DocumentTextIcon className="w-4 h-4 text-gray-500 shrink-0" />
-                                  <div className="min-w-0">
-                                    <p className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate max-w-xs" title={file.filename}>
-                                      {file.filename}
-                                    </p>
-                                    <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
-                                      <span>{formatFileSize(file.file_size)}</span>
-                                      {file.topic_name ? (
-                                        <>
-                                          <span>&bull;</span>
-                                          <span className="text-amber-700 dark:text-amber-400 truncate">
-                                            Currently on: {file.topic_name}
-                                          </span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <span>&bull;</span>
-                                          <span className="text-emerald-600 dark:text-emerald-400">
-                                            Unassigned
-                                          </span>
-                                        </>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <Button
-                                  size="sm"
-                                  disabled={isCurrentlyProcessing}
-                                  onClick={() => handleAttachFromLibrary(file)}
-                                  className="shrink-0 bg-gray-900 dark:bg-white dark:text-gray-950 hover:bg-gray-800 normal-case font-bold text-[11px] px-2.5 py-1.5 flex items-center gap-1"
-                                >
-                                  <PlusIcon className="w-3 h-3" />
-                                  <span>{isCurrentlyProcessing ? "Attaching..." : "Attach"}</span>
-                                </Button>
+                      <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1">
+                        {filteredLibraryFiles.length === 0 ? (
+                          <p className="text-xs text-gray-400 text-center py-4 italic">
+                            No files matching your search in library.
+                          </p>
+                        ) : (
+                          filteredLibraryFiles.map((file) => (
+                            <div
+                              key={file.id}
+                              className="flex items-center justify-between p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-xs gap-2"
+                            >
+                              <div className="truncate pr-2">
+                                <p className="font-semibold text-gray-900 dark:text-white truncate">
+                                  {file.filename}
+                                </p>
+                                <span className="text-[10px] text-gray-400">
+                                  {formatFileSize(file.file_size)}
+                                </span>
                               </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                              <Button
+                                size="sm"
+                                disabled={linkingActionLoadingId === file.id}
+                                onClick={() => handleAttachFromLibrary(file)}
+                                className="bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-[10px] py-1 px-2.5 font-semibold shrink-0"
+                              >
+                                {linkingActionLoadingId === file.id ? "Attaching..." : "Link"}
+                              </Button>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
               </DialogBody>
-
-              <DialogFooter className="border-t border-blue-gray-100 dark:border-gray-800 py-2.5 flex justify-end">
-                <Button
-                  size="sm"
-                  variant="text"
-                  onClick={() => setActiveTopic(null)}
-                  className="normal-case text-xs font-semibold text-gray-600 dark:text-gray-400"
-                >
-                  Close
-                </Button>
-              </DialogFooter>
             </div>
           )}
         </Dialog>

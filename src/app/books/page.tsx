@@ -47,6 +47,7 @@ import {
   getFileDownloadUrl,
 } from "@/lib/api";
 import { BOOK_SUBJECT_FILTERS } from "@/lib/books-data";
+import { formatFileSize, MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_LABEL } from "@/lib/constants";
 
 export default function BooksPage() {
   const { user } = useAuth();
@@ -825,7 +826,15 @@ export default function BooksPage() {
                   type="file"
                   ref={attachFileInputRef}
                   accept=".pdf"
-                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null;
+                    if (file && file.size > MAX_FILE_SIZE_BYTES) {
+                      alert(`The selected PDF exceeds the ${MAX_FILE_SIZE_LABEL} limit. Please select a file under ${MAX_FILE_SIZE_LABEL}.`);
+                      if (attachFileInputRef.current) attachFileInputRef.current.value = "";
+                      return;
+                    }
+                    setUploadFile(file);
+                  }}
                   className="hidden"
                 />
                 <div
@@ -839,7 +848,7 @@ export default function BooksPage() {
                         {uploadFile.name}
                       </p>
                       <p className="text-[11px] text-gray-500 mt-0.5">
-                        {(uploadFile.size / (1024 * 1024)).toFixed(2)} MB • Ready to upload
+                        {formatFileSize(uploadFile.size)} • Ready to upload
                       </p>
                     </div>
                   ) : (
@@ -848,7 +857,7 @@ export default function BooksPage() {
                         Click to select PDF file from device
                       </p>
                       <p className="text-[11px] text-gray-400 mt-1">
-                        Accessible across all your devices once uploaded
+                        Accessible across all your devices once uploaded (Supports up to 1 GB)
                       </p>
                     </div>
                   )}

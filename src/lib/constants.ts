@@ -3,45 +3,38 @@ import { Subject } from '@/types/database';
 export const APP_NAME = "UPSC Study Tracker";
 export const APP_SUBTITLE = "Simple habits. Consistent preparation.";
 
+// ----------------------------------------------------------------------
+// CANONICAL UPSC SYLLABUS PAPERS & SUBJECTS
+// ----------------------------------------------------------------------
+
 export const DEFAULT_SUBJECTS: Omit<Subject, 'id'>[] = [
-  // Prelims Core 8
-  { name: 'Polity', category: 'Prelims', paper: 'General', display_order: 1, active: true },
-  { name: 'History', category: 'Prelims', paper: 'General', display_order: 2, active: true },
-  { name: 'Geography', category: 'Prelims', paper: 'General', display_order: 3, active: true },
-  { name: 'Indian Economy', category: 'Prelims', paper: 'General', display_order: 4, active: true },
-  { name: 'Environment & Ecology', category: 'Prelims', paper: 'General', display_order: 5, active: true },
-  { name: 'Science & Technology', category: 'Prelims', paper: 'General', display_order: 6, active: true },
-  { name: 'Current Affairs', category: 'Prelims', paper: 'General', display_order: 7, active: true },
-  { name: 'CSAT', category: 'Prelims', paper: 'General', display_order: 8, active: true },
+  // Prelims Paper I (General Studies)
+  { name: 'Current Events of National & International Importance', category: 'Prelims', paper: 'General', display_order: 1, active: true },
+  { name: 'Indian and World Geography', category: 'Prelims', paper: 'General', display_order: 2, active: true },
+  { name: 'Indian History and National Movement', category: 'Prelims', paper: 'General', display_order: 3, active: true },
+  { name: 'Indian Polity and Governance', category: 'Prelims', paper: 'General', display_order: 4, active: true },
+  { name: 'Economic and Social Development', category: 'Prelims', paper: 'General', display_order: 5, active: true },
+  { name: 'Environment and Ecology', category: 'Prelims', paper: 'General', display_order: 6, active: true },
+  { name: 'General Science', category: 'Prelims', paper: 'General', display_order: 7, active: true },
 
-  // Mains GS Paper I
-  { name: 'Indian Heritage & Culture', category: 'Mains', paper: 'GS1', display_order: 101, active: true },
-  { name: 'History', category: 'Mains', paper: 'GS1', display_order: 102, active: true },
-  { name: 'Geography', category: 'Mains', paper: 'GS1', display_order: 103, active: true },
-  { name: 'Society', category: 'Mains', paper: 'GS1', display_order: 104, active: true },
+  // Prelims Paper II (CSAT)
+  { name: 'CSAT: Reading Comprehension', category: 'Prelims', paper: 'General', display_order: 8, active: true },
+  { name: 'CSAT: Interpersonal Skills & Communication', category: 'Prelims', paper: 'General', display_order: 9, active: true },
+  { name: 'CSAT: Logical Reasoning & Analytical Ability', category: 'Prelims', paper: 'General', display_order: 10, active: true },
+  { name: 'CSAT: Decision-Making & Problem-Solving', category: 'Prelims', paper: 'General', display_order: 11, active: true },
+  { name: 'CSAT: Basic Numeracy', category: 'Prelims', paper: 'General', display_order: 12, active: true },
+  { name: 'CSAT: Data Interpretation', category: 'Prelims', paper: 'General', display_order: 13, active: true },
 
-  // Mains GS Paper II
-  { name: 'Constitution', category: 'Mains', paper: 'GS2', display_order: 201, active: true },
-  { name: 'Polity & Governance', category: 'Mains', paper: 'GS2', display_order: 202, active: true },
-  { name: 'Social Justice', category: 'Mains', paper: 'GS2', display_order: 203, active: true },
-  { name: 'International Relations', category: 'Mains', paper: 'GS2', display_order: 204, active: true },
+  // Mains General Studies & Compulsory Papers
+  { name: 'Qualifying Papers: Indian Language & English', category: 'Mains', paper: 'Essay', display_order: 101, active: true },
+  { name: 'Paper I: Essay', category: 'Mains', paper: 'Essay', display_order: 102, active: true },
+  { name: 'Paper II (GS-I): Indian Heritage, Culture, History, World Geography, Society', category: 'Mains', paper: 'GS1', display_order: 103, active: true },
+  { name: 'Paper III (GS-II): Governance, Constitution, Polity, Social Justice, IR', category: 'Mains', paper: 'GS2', display_order: 104, active: true },
+  { name: 'Paper IV (GS-III): Technology, Economic Development, Biodiversity, Environment, Security, Disaster Management', category: 'Mains', paper: 'GS3', display_order: 105, active: true },
+  { name: 'Paper V (GS-IV): Ethics, Integrity, and Aptitude', category: 'Mains', paper: 'GS4', display_order: 106, active: true },
 
-  // Mains GS Paper III
-  { name: 'Economy', category: 'Mains', paper: 'GS3', display_order: 301, active: true },
-  { name: 'Agriculture', category: 'Mains', paper: 'GS3', display_order: 302, active: true },
-  { name: 'Science & Technology', category: 'Mains', paper: 'GS3', display_order: 303, active: true },
-  { name: 'Environment', category: 'Mains', paper: 'GS3', display_order: 304, active: true },
-  { name: 'Internal Security', category: 'Mains', paper: 'GS3', display_order: 305, active: true },
-  { name: 'Disaster Management', category: 'Mains', paper: 'GS3', display_order: 306, active: true },
-
-  // Mains GS Paper IV
-  { name: 'Ethics', category: 'Mains', paper: 'GS4', display_order: 401, active: true },
-  { name: 'Integrity', category: 'Mains', paper: 'GS4', display_order: 402, active: true },
-  { name: 'Aptitude', category: 'Mains', paper: 'GS4', display_order: 403, active: true },
-
-  // Mains Other
-  { name: 'Essay', category: 'Mains', paper: 'Essay', display_order: 501, active: true },
-  { name: 'Optional Subject', category: 'Mains', paper: 'Optional', display_order: 502, active: true },
+  // Optional Subject
+  { name: 'Optional Subject (Paper I & II)', category: 'Mains', paper: 'Optional', display_order: 107, active: true },
 ];
 
 export const INITIAL_SUBJECTS: Subject[] = DEFAULT_SUBJECTS.map((s, idx) => ({
@@ -50,6 +43,62 @@ export const INITIAL_SUBJECTS: Subject[] = DEFAULT_SUBJECTS.map((s, idx) => ({
 }));
 
 export const PRELIMS_CORE_SUBJECTS = INITIAL_SUBJECTS.filter(s => s.category === 'Prelims');
+
+// 25 Core UPSC Optional Subjects
+export const UPSC_OPTIONAL_CORE_SUBJECTS = [
+  'Agriculture',
+  'Animal Husbandry and Veterinary Science',
+  'Anthropology',
+  'Botany',
+  'Chemistry',
+  'Civil Engineering',
+  'Commerce and Accountancy',
+  'Economics',
+  'Electrical Engineering',
+  'Geography',
+  'Geology',
+  'History',
+  'Law',
+  'Management',
+  'Mathematics',
+  'Mechanical Engineering',
+  'Medical Science',
+  'Philosophy',
+  'Physics',
+  'Political Science and International Relations (PSIR)',
+  'Psychology',
+  'Public Administration',
+  'Sociology',
+  'Statistics',
+  'Zoology',
+];
+
+// 23 UPSC Literature Optional Subjects
+export const UPSC_OPTIONAL_LITERATURE_SUBJECTS = [
+  'Assamese Literature',
+  'Bengali Literature',
+  'Bodo Literature',
+  'Dogri Literature',
+  'Gujarati Literature',
+  'Hindi Literature',
+  'Kannada Literature',
+  'Kashmiri Literature',
+  'Konkani Literature',
+  'Maithili Literature',
+  'Malayalam Literature',
+  'Manipuri Literature',
+  'Marathi Literature',
+  'Nepali Literature',
+  'Odia Literature',
+  'Punjabi Literature',
+  'Sanskrit Literature',
+  'Santhali Literature',
+  'Sindhi Literature',
+  'Tamil Literature',
+  'Telugu Literature',
+  'Urdu Literature',
+  'English Literature',
+];
 
 export function getGreeting(): string {
   const hour = new Date().getHours();
@@ -88,10 +137,16 @@ export function formatShortDate(dateStr: string): string {
   });
 }
 
+// 1 GB file upload limit support
+export const MAX_FILE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB (1,073,741,824 bytes)
+export const MAX_FILE_SIZE_LABEL = '1 GB';
+
 export function formatFileSize(bytes: number): string {
+  if (!bytes || bytes <= 0) return '0 B';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 export const ALLOWED_FILE_TYPES = [
@@ -109,33 +164,34 @@ export const ALLOWED_FILE_TYPES = [
 export const ALLOWED_EXTENSIONS = '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png';
 
 export const FILE_SUBJECT_CATEGORIES = [
-  'Polity',
-  'History',
-  'Geography',
-  'Economy',
-  'Environment & Ecology',
-  'Science & Technology',
-  'Current Affairs',
+  'Indian History & National Movement',
+  'Indian and World Geography',
+  'Indian Polity and Governance',
+  'Economic and Social Development',
+  'Environment and Ecology',
+  'General Science & Technology',
+  'Current Events & Affairs',
   'CSAT',
-  'GS I',
-  'GS II',
-  'GS III',
-  'GS IV',
+  'Mains GS I',
+  'Mains GS II',
+  'Mains GS III',
+  'Mains GS IV (Ethics)',
   'Essay',
-  'Optional',
+  'Optional Subject',
   'Other',
 ];
 
 export const FILE_FILTER_CATEGORIES = [
   'All',
-  'Polity',
   'History',
   'Geography',
+  'Polity',
   'Economy',
   'Environment',
-  'Science & Technology',
-  'Current Affairs',
+  'Science',
+  'Current Events',
   'CSAT',
   'Mains',
+  'Optional',
   'Other',
 ];

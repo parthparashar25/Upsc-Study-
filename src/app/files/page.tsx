@@ -44,6 +44,8 @@ import {
   formatFileSize,
   formatShortDate,
   ALLOWED_EXTENSIONS,
+  MAX_FILE_SIZE_BYTES,
+  MAX_FILE_SIZE_LABEL,
 } from "@/lib/constants";
 
 function FilesContent() {
@@ -216,7 +218,7 @@ function FilesContent() {
       const tooLarge: string[] = [];
 
       incoming.forEach((f) => {
-        if (f.size > 50 * 1024 * 1024) {
+        if (f.size > MAX_FILE_SIZE_BYTES) {
           tooLarge.push(f.name);
         } else {
           valid.push(f);
@@ -225,7 +227,7 @@ function FilesContent() {
 
       if (tooLarge.length > 0) {
         setUploadError(
-          `${tooLarge.length} file(s) exceeded the 50 MB limit: ${tooLarge.slice(0, 2).join(", ")}${
+          `${tooLarge.length} file(s) exceeded the ${MAX_FILE_SIZE_LABEL} limit: ${tooLarge.slice(0, 2).join(", ")}${
             tooLarge.length > 2 ? "..." : ""
           }`
         );
@@ -863,7 +865,7 @@ function FilesContent() {
               {/* 1. Choose Multiple Files */}
               <div>
                 <label className="block text-xs font-bold text-blue-gray-800 dark:text-gray-200 mb-1">
-                  1. Select Files <span className="text-gray-400 font-normal">(Select multiple PDFs or documents)</span>
+                  1. Select Files <span className="text-gray-400 font-normal">(Select multiple PDFs or documents, up to 1 GB each)</span>
                 </label>
                 <div className="flex items-center gap-2">
                   <input

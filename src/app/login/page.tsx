@@ -26,6 +26,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { isSupabaseConfigured, saveCustomSupabaseConfig } from "@/lib/supabase";
 import { SocialAuthButtons } from "@/components/SocialAuthButtons";
+import { getBiometricPlatformName } from "@/lib/biometrics";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -174,7 +175,7 @@ export default function LoginPage() {
                 className="flex items-center justify-center gap-2 py-2.5 border-emerald-500 text-emerald-700 dark:text-emerald-400 dark:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 normal-case font-bold text-xs"
               >
                 <FingerPrintIcon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                <span>{biometricLoading ? "Verifying Sensor..." : "Unlock with Fingerprint / Windows Hello"}</span>
+                <span>{biometricLoading ? "Verifying Sensor..." : `Unlock with ${getBiometricPlatformName()}`}</span>
               </Button>
               <div className="flex items-center my-3">
                 <div className="grow border-t border-gray-200 dark:border-gray-800" />
