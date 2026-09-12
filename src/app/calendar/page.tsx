@@ -305,17 +305,30 @@ export default function CalendarPage() {
 
               {/* Special Target Exam Card */}
               {selectedDate === TARGET_EXAM_DATE && (
-                <div className="p-3.5 rounded-xl bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 text-white border border-emerald-500/80 space-y-2.5 shadow-sm">
+                <div
+                  style={{
+                    background: "linear-gradient(135deg, #0b1120 0%, #0f172a 50%, #022c22 100%)",
+                    borderColor: "rgba(16, 185, 129, 0.6)",
+                    color: "#ffffff",
+                  }}
+                  className="p-3.5 rounded-xl bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 text-white border border-emerald-500/80 space-y-2.5 shadow-sm"
+                >
                   <div className="flex items-center gap-2">
                     <span className="text-xl">🎯</span>
                     <div>
-                      <h4 className="text-xs font-bold text-emerald-400">Targeted UPSC Attempt</h4>
+                      <h4
+                        style={{ color: "#34d399" }}
+                        className="text-xs font-bold text-emerald-400"
+                      >
+                        Targeted UPSC Attempt
+                      </h4>
                       <p className="text-[11px] text-white font-bold">{TARGET_EXAM_DISPLAY}</p>
                     </div>
                   </div>
                   <ExamCountdownTimer variant="compact" showDateBadge={false} />
                   <Link
                     href="/portion"
+                    style={{ backgroundColor: "#10b981", color: "#020617" }}
                     className="block text-center text-xs font-bold py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 transition-colors shadow-xs"
                   >
                     Open Portion Tracker &amp; Rapid Revision &rarr;

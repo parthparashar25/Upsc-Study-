@@ -54,7 +54,7 @@ import {
 import { ExamCountdownTimer } from "@/components/ExamCountdownTimer";
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const todayIso = useMemo(() => formatDateToIso(new Date()), []);
   const [selectedDate, setSelectedDate] = useState<string>(todayIso);
 
@@ -142,7 +142,7 @@ export default function DashboardPage() {
     setLoadingTopics(true);
 
     Promise.all([
-      fetchSyllabusStatistics(user.id),
+      fetchSyllabusStatistics(user.id, profile?.optional_subject),
       fetchRecentlyStudiedTopics(user.id, 4),
     ]).then(([stats, recents]) => {
       if (isMounted) {
@@ -155,7 +155,7 @@ export default function DashboardPage() {
     return () => {
       isMounted = false;
     };
-  }, [user]);
+  }, [user, profile?.optional_subject]);
 
   // Handle instant habit toggle
   const handleToggleHabit = async (subjectId: string) => {
@@ -238,7 +238,7 @@ export default function DashboardPage() {
     });
 
     // Refresh overall stats
-    fetchSyllabusStatistics(user.id).then(setSyllabusStats);
+    fetchSyllabusStatistics(user.id, profile?.optional_subject).then(setSyllabusStats);
   };
 
   // Quick Topic Logger helpers
@@ -288,7 +288,7 @@ export default function DashboardPage() {
 
     // Refresh recents and stats
     const [stats, recents] = await Promise.all([
-      fetchSyllabusStatistics(user.id),
+      fetchSyllabusStatistics(user.id, profile?.optional_subject),
       fetchRecentlyStudiedTopics(user.id, 4),
     ]);
     setSyllabusStats(stats);
@@ -377,7 +377,14 @@ export default function DashboardPage() {
         </div>
 
         {/* TARGETED UPSC ATTEMPT BANNER (23-05-2027 SUNDAY) */}
-        <div className="rounded-2xl p-5 bg-gradient-to-br from-slate-900 via-slate-800 to-zinc-900 text-white border border-slate-700/80 shadow-sm relative overflow-hidden">
+        <div
+          style={{
+            background: "linear-gradient(135deg, #0b1120 0%, #0f172a 50%, #1e293b 100%)",
+            borderColor: "#334155",
+            color: "#ffffff",
+          }}
+          className="rounded-2xl p-5 bg-gradient-to-br from-slate-900 via-slate-800 to-zinc-900 text-white border border-slate-700/80 shadow-sm relative overflow-hidden"
+        >
           {/* Ambient blur accents */}
           <div className="absolute -top-10 -right-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
           <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
@@ -386,7 +393,14 @@ export default function DashboardPage() {
             {/* Header + Live Timer */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div>
-                <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold tracking-wide mb-1.5">
+                <div
+                  style={{
+                    backgroundColor: "rgba(16, 185, 129, 0.15)",
+                    borderColor: "rgba(16, 185, 129, 0.4)",
+                    color: "#34d399",
+                  }}
+                  className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold tracking-wide mb-1.5"
+                >
                   <CalendarDaysIcon className="w-3.5 h-3.5 text-emerald-400" />
                   <span>{TARGET_EXAM_DISPLAY}</span>
                 </div>
@@ -399,7 +413,10 @@ export default function DashboardPage() {
               </div>
 
               {/* Live Pleasant Countdown Timer */}
-              <div className="bg-slate-950/70 border border-slate-700/60 rounded-xl p-2.5 shadow-inner">
+              <div
+                style={{ backgroundColor: "#020617", borderColor: "#334155" }}
+                className="bg-slate-950/70 border border-slate-700/60 rounded-xl p-2.5 shadow-inner"
+              >
                 <ExamCountdownTimer variant="compact" showDateBadge={false} />
               </div>
             </div>
@@ -407,7 +424,10 @@ export default function DashboardPage() {
             {/* Portion Completed vs Left & Key Preparation Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 border-t border-slate-700/60">
               {/* 1. Portion Completed */}
-              <div className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-700/50">
+              <div
+                style={{ backgroundColor: "rgba(2, 6, 23, 0.6)", borderColor: "rgba(51, 65, 85, 0.6)" }}
+                className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-700/50"
+              >
                 <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
                   <span>Portion Completed</span>
                   <span className="text-emerald-400 font-bold">{portionPercent}%</span>
@@ -421,7 +441,10 @@ export default function DashboardPage() {
               </div>
 
               {/* 2. Portion Left */}
-              <div className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-700/50">
+              <div
+                style={{ backgroundColor: "rgba(2, 6, 23, 0.6)", borderColor: "rgba(51, 65, 85, 0.6)" }}
+                className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-700/50"
+              >
                 <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
                   <span>Portion Left</span>
                   <span className="text-amber-400 font-bold">{portionLeftPercent}%</span>
@@ -435,7 +458,10 @@ export default function DashboardPage() {
               </div>
 
               {/* 3. Revised Time / Revisions Logged */}
-              <div className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-700/50">
+              <div
+                style={{ backgroundColor: "rgba(2, 6, 23, 0.6)", borderColor: "rgba(51, 65, 85, 0.6)" }}
+                className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-700/50"
+              >
                 <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
                   <span>Revised Times</span>
                   <span className="text-cyan-400 font-bold">3x Target</span>
@@ -449,7 +475,10 @@ export default function DashboardPage() {
               </div>
 
               {/* 4. PYQs Practiced */}
-              <div className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-700/50">
+              <div
+                style={{ backgroundColor: "rgba(2, 6, 23, 0.6)", borderColor: "rgba(51, 65, 85, 0.6)" }}
+                className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-700/50"
+              >
                 <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
                   <span>PYQs Practiced</span>
                   <span className="text-purple-400 font-bold">10-Yr Target</span>

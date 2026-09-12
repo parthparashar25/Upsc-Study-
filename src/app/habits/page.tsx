@@ -39,8 +39,8 @@ import {
   logTopicStudySession,
   deleteDailyTopicLog,
 } from "@/lib/api";
-import { MASTER_SYLLABUS, MasterSyllabusSubject } from "@/lib/syllabus-data";
-import { formatDateToIso, formatDisplayDate } from "@/lib/constants";
+import { MASTER_SYLLABUS, MasterSyllabusSubject, getOptionalSyllabus } from "@/lib/syllabus-data";
+import { formatDateToIso, formatDisplayDate, isValidOptionalSubject } from "@/lib/constants";
 
 // Core daily discipline habits for combined Prelims + Mains preparation
 const CORE_DAILY_HABITS = [
@@ -82,7 +82,7 @@ const CORE_DAILY_HABITS = [
 ];
 
 export default function HabitsPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const userId = user?.id || "demo-user";
 
   const todayIso = useMemo(() => formatDateToIso(new Date()), []);
@@ -94,6 +94,17 @@ export default function HabitsPage() {
   const [topicLogs, setTopicLogs] = useState<DailyTopicLog[]>([]);
   const [dailyStats, setDailyStats] = useState<DailyStats | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const optionalSubjectName = profile?.optional_subject;
+  const hasOptional = isValidOptionalSubject(optionalSubjectName);
+
+  const availableSubjects = useMemo(() => {
+    const list: MasterSyllabusSubject[] = MASTER_SYLLABUS.filter((s) => s.id !== "subj-mains-optional");
+    if (hasOptional && optionalSubjectName) {
+      list.push(getOptionalSyllabus(optionalSubjectName));
+    }
+    return list;
+  }, [hasOptional, optionalSubjectName]);
 
   // Log Topic Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -110,8 +121,8 @@ export default function HabitsPage() {
 
   // Available sections for chosen subject
   const currentSubjectObj = useMemo(() => {
-    return MASTER_SYLLABUS.find((s) => s.id === selectedSubjId) || MASTER_SYLLABUS[0];
-  }, [selectedSubjId]);
+    return availableSubjects.find((s) => s.id === selectedSubjId) || availableSubjects[0];
+  }, [availableSubjects, selectedSubjId]);
 
   const currentSectionObj = useMemo(() => {
     return (
@@ -123,7 +134,7 @@ export default function HabitsPage() {
   // Handle subject change in modal
   const handleSubjectChange = (newSubjId: string) => {
     setSelectedSubjId(newSubjId);
-    const sub = MASTER_SYLLABUS.find((s) => s.id === newSubjId);
+    const sub = availableSubjects.find((s) => s.id === newSubjId);
     if (sub && sub.sections.length > 0) {
       setSelectedSecId(sub.sections[0].id);
       if (sub.sections[0].topics.length > 0) {
@@ -588,7 +599,7 @@ export default function HabitsPage() {
                   onChange={(e) => handleSubjectChange(e.target.value)}
                   className="w-full px-3 py-2 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-white font-medium"
                 >
-                  {MASTER_SYLLABUS.map((subj) => (
+                  {availableSubjects.map((subj) => (
                     <option key={subj.id} value={subj.id}>
                       {subj.name}
                     </option>

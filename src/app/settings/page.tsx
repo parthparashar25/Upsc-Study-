@@ -20,11 +20,17 @@ import {
   FingerPrintIcon,
   ShieldCheckIcon,
   XMarkIcon,
+  ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { getBiometricPlatformName } from "@/lib/biometrics";
+import {
+  UPSC_OPTIONAL_CORE_SUBJECTS,
+  UPSC_OPTIONAL_LITERATURE_SUBJECTS,
+  isValidOptionalSubject,
+} from "@/lib/constants";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -52,6 +58,33 @@ export default function SettingsPage() {
   const [bioPassword, setBioPassword] = useState("");
   const [bioLoading, setBioLoading] = useState(false);
   const [bioError, setBioError] = useState("");
+
+  // Optional Subject Confirmation Dialog state
+  const [showOptionalModal, setShowOptionalModal] = useState(false);
+  const [pendingOptional, setPendingOptional] = useState<string | null>(null);
+
+  const handleSelectOptional = (newVal: string) => {
+    const currentSaved = profile?.optional_subject || "";
+    if (isValidOptionalSubject(currentSaved) && newVal !== currentSaved) {
+      setPendingOptional(newVal);
+      setShowOptionalModal(true);
+      return;
+    }
+    setOptionalSubject(newVal);
+  };
+
+  const handleConfirmOptionalChange = () => {
+    if (pendingOptional !== null) {
+      setOptionalSubject(pendingOptional);
+    }
+    setShowOptionalModal(false);
+    setPendingOptional(null);
+  };
+
+  const handleCancelOptionalChange = () => {
+    setShowOptionalModal(false);
+    setPendingOptional(null);
+  };
 
   useEffect(() => {
     if (profile) {
@@ -168,16 +201,44 @@ export default function SettingsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-blue-gray-700 dark:text-gray-300 mb-1">
-                  Optional Subject
-                </label>
-                <input
-                  type="text"
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-blue-gray-700 dark:text-gray-300">
+                    Mains Optional Subject
+                  </label>
+                  {isValidOptionalSubject(optionalSubject) ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                      Active: {optionalSubject}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                      Not Selected
+                    </span>
+                  )}
+                </div>
+                <select
                   value={optionalSubject}
-                  onChange={(e) => setOptionalSubject(e.target.value)}
-                  placeholder="e.g. Anthropology, PSIR, Geography, History"
+                  onChange={(e) => handleSelectOptional(e.target.value)}
                   className="w-full px-3 py-2 text-xs border border-blue-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:border-gray-900 dark:focus:border-gray-400 font-medium bg-white dark:bg-gray-800 dark:text-white"
-                />
+                >
+                  <option value="">Optional Subject — Not Selected</option>
+                  <optgroup label="25 Core UPSC Optional Subjects">
+                    {UPSC_OPTIONAL_CORE_SUBJECTS.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="23 Literature Optional Subjects">
+                    {UPSC_OPTIONAL_LITERATURE_SUBJECTS.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                  Select ONE optional subject. Before selection, Optional portion progress is not tracked and excluded from Overall UPSC percentage.
+                </p>
               </div>
 
               <div>
@@ -352,6 +413,51 @@ export default function SettingsPage() {
             </Button>
           </DialogFooter>
         </form>
+      </Dialog>
+
+      {/* Optional Subject Change Confirmation Dialog */}
+      <Dialog
+        open={showOptionalModal}
+        handler={handleCancelOptionalChange}
+        size="sm"
+        className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800"
+      >
+        <DialogHeader className="p-0 pb-3 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800">
+          <ExclamationTriangleIcon className="w-5 h-5 text-amber-500 shrink-0" />
+          <Typography variant="h6" className="font-bold text-sm text-gray-900 dark:text-white">
+            Confirm Change of Mains Optional Subject
+          </Typography>
+        </DialogHeader>
+        <DialogBody className="p-0 py-4 text-xs text-gray-600 dark:text-gray-300 space-y-3">
+          <p>
+            You are currently preparing for <span className="font-bold text-gray-900 dark:text-white">{profile?.optional_subject || "your current optional"}</span> and are switching to{" "}
+            <span className="font-bold text-gray-900 dark:text-white">{pendingOptional || "Not Selected"}</span>.
+          </p>
+          <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 text-[11px] leading-relaxed">
+            <strong>Progress Safety Guarantee:</strong> All your past study records, topic completions, and revisions for{" "}
+            <strong>{profile?.optional_subject}</strong> will be preserved safely in the database. If you switch back later, all your progress will be restored.
+          </div>
+          <p className="text-[11px] text-gray-500 dark:text-gray-400">
+            Only {pendingOptional || "the active optional"} will contribute to your active Optional syllabus progress and Overall UPSC Portion percentage.
+          </p>
+        </DialogBody>
+        <DialogFooter className="p-0 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2">
+          <Button
+            size="sm"
+            variant="text"
+            onClick={handleCancelOptionalChange}
+            className="normal-case text-xs text-gray-600 dark:text-gray-300"
+          >
+            Keep {profile?.optional_subject}
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleConfirmOptionalChange}
+            className="normal-case bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-xs font-bold"
+          >
+            Confirm Switch
+          </Button>
+        </DialogFooter>
       </Dialog>
     </AppLayout>
   );

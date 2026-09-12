@@ -1,4 +1,5 @@
-import { SyllabusSubject, SyllabusSection, SyllabusTopic } from "@/types/database";
+import { SyllabusSubject, SyllabusSection, SyllabusTopic, TopicProgress, TopicStatus } from "@/types/database";
+import { isValidOptionalSubject } from "@/lib/constants";
 
 export interface MasterSyllabusSubject extends SyllabusSubject {
   sections: {
@@ -1415,20 +1416,27 @@ export const MASTER_SYLLABUS: MasterSyllabusSubject[] = [
         ]
       },
       {
-        "id": "sec-pre-csat-reasoning",
-        "name": "Logical Reasoning & Analytical Ability",
+        "id": "sec-pre-csat-logical",
+        "name": "Logical Reasoning",
         "display_order": 3,
         "topics": [
           { "id": "top-pre-csat-reasoning-1-logical-reasoning", "name": "Syllogisms, Deductions & Statements", "display_order": 1 },
-          { "id": "top-pre-csat-reasoning-2-analytical-ability", "name": "Seating Arrangement & Blood Relations", "display_order": 2 },
-          { "id": "top-pre-csat-reasoning-3-coding-series", "name": "Coding-Decoding, Series & Sequences", "display_order": 3 },
-          { "id": "top-pre-csat-reasoning-4-clocks-calendars", "name": "Directions, Clocks, Calendars & Puzzles", "display_order": 4 }
+          { "id": "top-pre-csat-reasoning-3-coding-series", "name": "Coding-Decoding, Series & Sequences", "display_order": 2 }
+        ]
+      },
+      {
+        "id": "sec-pre-csat-analytical",
+        "name": "Analytical Ability",
+        "display_order": 4,
+        "topics": [
+          { "id": "top-pre-csat-reasoning-2-analytical-ability", "name": "Seating Arrangement & Blood Relations", "display_order": 1 },
+          { "id": "top-pre-csat-reasoning-4-clocks-calendars", "name": "Directions, Clocks, Calendars & Puzzles", "display_order": 2 }
         ]
       },
       {
         "id": "sec-pre-csat-decision",
         "name": "Decision-Making & Problem-Solving",
-        "display_order": 4,
+        "display_order": 5,
         "topics": [
           { "id": "top-pre-csat-decision-1", "name": "Administrative & Ethical Dilemmas", "display_order": 1 },
           { "id": "top-pre-csat-decision-2", "name": "Problem Evaluation & Priority Setting", "display_order": 2 }
@@ -1437,7 +1445,7 @@ export const MASTER_SYLLABUS: MasterSyllabusSubject[] = [
       {
         "id": "sec-pre-csat-num",
         "name": "Basic Numeracy (Class X Level)",
-        "display_order": 5,
+        "display_order": 6,
         "topics": [
           { "id": "top-pre-csat-num-2-number-system", "name": "Number System, Divisibility, LCM & HCF", "display_order": 1 },
           { "id": "top-pre-csat-num-3-percentage", "name": "Percentages & Fractions", "display_order": 2 },
@@ -1452,7 +1460,7 @@ export const MASTER_SYLLABUS: MasterSyllabusSubject[] = [
       {
         "id": "sec-pre-csat-di",
         "name": "Data Interpretation & Sufficiency",
-        "display_order": 6,
+        "display_order": 7,
         "topics": [
           { "id": "top-pre-csat-num-10-data-interpretation", "name": "Charts, Graphs, Tables & Pie Charts", "display_order": 1 },
           { "id": "top-pre-csat-num-11-data-sufficiency", "name": "Data Sufficiency Statements", "display_order": 2 }
@@ -2599,6 +2607,49 @@ export const MASTER_SYLLABUS: MasterSyllabusSubject[] = [
     ]
   },
   {
+    "id": "subj-mains-qual-lang",
+    "name": "Indian Language",
+    "exam": "Mains",
+    "paper": "Qualifying",
+    "display_order": 91,
+    "active": true,
+    "sections": [
+      {
+        "id": "sec-mains-qual-lang",
+        "name": "Indian Language Curriculum",
+        "display_order": 1,
+        "topics": [
+          { "id": "top-mains-qual-lang-1-comprehension", "name": "Comprehension of Given Passages", "display_order": 1 },
+          { "id": "top-mains-qual-lang-2-precis", "name": "Precis Writing", "display_order": 2 },
+          { "id": "top-mains-qual-lang-3-usage", "name": "Usage & Vocabulary", "display_order": 3 },
+          { "id": "top-mains-qual-lang-4-essay", "name": "Short Essays", "display_order": 4 },
+          { "id": "top-mains-qual-lang-5-translation", "name": "Translation (English to Indian Language & vice-versa)", "display_order": 5 }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "subj-mains-qual-eng",
+    "name": "English",
+    "exam": "Mains",
+    "paper": "Qualifying",
+    "display_order": 92,
+    "active": true,
+    "sections": [
+      {
+        "id": "sec-mains-qual-eng",
+        "name": "English Curriculum",
+        "display_order": 1,
+        "topics": [
+          { "id": "top-mains-qual-eng-1-comprehension", "name": "Comprehension of Given Passages", "display_order": 1 },
+          { "id": "top-mains-qual-eng-2-precis", "name": "Precis Writing", "display_order": 2 },
+          { "id": "top-mains-qual-eng-3-usage", "name": "Usage & Vocabulary", "display_order": 3 },
+          { "id": "top-mains-qual-eng-4-essay", "name": "Short Essays", "display_order": 4 }
+        ]
+      }
+    ]
+  },
+  {
     "id": "subj-mains-essay",
     "name": "Essay",
     "exam": "Mains",
@@ -2751,9 +2802,79 @@ export const MASTER_SYLLABUS: MasterSyllabusSubject[] = [
   }
 ];
 
-export function getAllTopics(): SyllabusTopic[] {
+export function getOptionalSyllabus(optionalSubjectName: string): MasterSyllabusSubject {
+  const slug = optionalSubjectName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+
+  return {
+    id: `subj-mains-opt-${slug}`,
+    name: `Optional: ${optionalSubjectName}`,
+    exam: 'Mains',
+    paper: 'Optional',
+    display_order: 601,
+    active: true,
+    sections: [
+      {
+        id: `sec-opt-${slug}-p1-foundations`,
+        name: 'Paper I: Foundations & Core Theories',
+        display_order: 1,
+        topics: [
+          { id: `top-opt-${slug}-p1-1-principles`, name: 'Foundational Principles & Classical Theories', display_order: 1 },
+          { id: `top-opt-${slug}-p1-2-thinkers`, name: 'Key Thinkers & Schools of Thought', display_order: 2 },
+          { id: `top-opt-${slug}-p1-3-models`, name: 'Structural Frameworks & Paradigms', display_order: 3 },
+          { id: `top-opt-${slug}-p1-4-critique`, name: 'Critical Perspectives & Analytical Debates', display_order: 4 },
+        ],
+      },
+      {
+        id: `sec-opt-${slug}-p1-methods`,
+        name: 'Paper I: Applied Approaches & Methodologies',
+        display_order: 2,
+        topics: [
+          { id: `top-opt-${slug}-p1-5-research`, name: 'Research Methods & Quantitative/Qualitative Analysis', display_order: 1 },
+          { id: `top-opt-${slug}-p1-6-comparative`, name: 'Comparative Frameworks & Global Best Practices', display_order: 2 },
+          { id: `top-opt-${slug}-p1-7-emerging`, name: 'Emerging Trends & Modern Interdisciplinary Paradigms', display_order: 3 },
+          { id: `top-opt-${slug}-p1-8-problemsets`, name: 'Applied Problem Solving & Answer Formulations', display_order: 4 },
+        ],
+      },
+      {
+        id: `sec-opt-${slug}-p2-indian`,
+        name: 'Paper II: Indian Context & Institutional Evolution',
+        display_order: 3,
+        topics: [
+          { id: `top-opt-${slug}-p2-1-historical`, name: 'Historical & Institutional Evolution in India', display_order: 1 },
+          { id: `top-opt-${slug}-p2-2-statutory`, name: 'Constitutional, Legal & Policy Architecture', display_order: 2 },
+          { id: `top-opt-${slug}-p2-3-socioeco`, name: 'Socio-Economic Dynamics & Grassroots Challenges', display_order: 3 },
+          { id: `top-opt-${slug}-p2-4-regional`, name: 'Regional Variations, Inclusivity & Reforms', display_order: 4 },
+        ],
+      },
+      {
+        id: `sec-opt-${slug}-p2-cases`,
+        name: 'Paper II: Contemporary Policies & Case Studies',
+        display_order: 4,
+        topics: [
+          { id: `top-opt-${slug}-p2-5-policies`, name: 'National Schemes, Programs & Impact Assessments', display_order: 1 },
+          { id: `top-opt-${slug}-p2-6-casestudies`, name: 'Empirical Case Studies & Ground Realities', display_order: 2 },
+          { id: `top-opt-${slug}-p2-7-committees`, name: 'Key Committee Reports & Policy Recommendations', display_order: 3 },
+          { id: `top-opt-${slug}-p2-8-answers`, name: 'Mains Applied Answer Writing & Case Linkages', display_order: 4 },
+        ],
+      },
+    ],
+  };
+}
+
+export function getAllTopics(optionalSubjectName?: string | null): SyllabusTopic[] {
   const all: SyllabusTopic[] = [];
-  MASTER_SYLLABUS.forEach((subj) => {
+  const subjectsToInclude: MasterSyllabusSubject[] = MASTER_SYLLABUS.filter(
+    (s) => s.id !== 'subj-mains-optional'
+  );
+
+  if (isValidOptionalSubject(optionalSubjectName)) {
+    subjectsToInclude.push(getOptionalSyllabus(optionalSubjectName!));
+  }
+
+  subjectsToInclude.forEach((subj) => {
     subj.sections.forEach((sec) => {
       sec.topics.forEach((t) => {
         all.push({
@@ -2780,9 +2901,275 @@ export function computeTopicStatus(
   revision: boolean,
   pyq: boolean,
   currentStatus?: string
-): any {
+): TopicStatus {
   if (currentStatus === "Revision Due") return "Revision Due";
   if (!study && !revision && !pyq) return "Not Started";
   if (study && revision && pyq) return "Completed";
   return "In Progress";
 }
+
+export interface SyllabusProgressNode {
+  id: string;
+  name: string;
+  level: 'overall' | 'exam' | 'paper' | 'subject' | 'subsubject' | 'chapter' | 'topic';
+  total: number;
+  completed: number;
+  inProgress: number;
+  notStarted: number;
+  revisionDue: number;
+  percent: number;
+  children?: SyllabusProgressNode[];
+  topicData?: {
+    id: string;
+    name: string;
+    description?: string;
+    study_completed?: boolean;
+    revision_completed?: boolean;
+    pyq_completed?: boolean;
+    status?: TopicStatus;
+    last_studied?: string | null;
+  };
+}
+
+export interface PortionHierarchyTree {
+  overall: SyllabusProgressNode;
+  prelims: SyllabusProgressNode;
+  mains: SyllabusProgressNode;
+  optional: SyllabusProgressNode | null;
+  hasOptionalSelected: boolean;
+  selectedOptionalName: string | null;
+}
+
+function aggregateNode(
+  id: string,
+  name: string,
+  level: 'overall' | 'exam' | 'paper' | 'subject' | 'subsubject' | 'chapter',
+  children: SyllabusProgressNode[]
+): SyllabusProgressNode {
+  const total = children.reduce((acc, c) => acc + c.total, 0);
+  const completed = children.reduce((acc, c) => acc + c.completed, 0);
+  const inProgress = children.reduce((acc, c) => acc + c.inProgress, 0);
+  const notStarted = children.reduce((acc, c) => acc + c.notStarted, 0);
+  const revisionDue = children.reduce((acc, c) => acc + c.revisionDue, 0);
+  const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+  return { id, name, level, total, completed, inProgress, notStarted, revisionDue, percent, children };
+}
+
+function topicToNode(
+  topic: { id: string; name: string; description?: string },
+  progressMap: Record<string, TopicProgress>
+): SyllabusProgressNode {
+  const prog = progressMap[topic.id];
+  const isCompleted =
+    prog?.status === 'Completed' ||
+    (prog?.study_completed && prog?.revision_completed && prog?.pyq_completed) ||
+    false;
+  const isInProgress =
+    !isCompleted &&
+    Boolean(
+      prog?.study_completed ||
+      prog?.revision_completed ||
+      prog?.pyq_completed ||
+      prog?.status === 'In Progress'
+    );
+  const isRevisionDue = prog?.status === 'Revision Due';
+  const isNotStarted = !isCompleted && !isInProgress && !isRevisionDue;
+
+  return {
+    id: topic.id,
+    name: topic.name,
+    level: 'topic',
+    total: 1,
+    completed: isCompleted ? 1 : 0,
+    inProgress: isInProgress ? 1 : 0,
+    notStarted: isNotStarted ? 1 : 0,
+    revisionDue: isRevisionDue ? 1 : 0,
+    percent: isCompleted ? 100 : 0,
+    topicData: {
+      id: topic.id,
+      name: topic.name,
+      description: topic.description || '',
+      study_completed: prog?.study_completed || false,
+      revision_completed: prog?.revision_completed || false,
+      pyq_completed: prog?.pyq_completed || false,
+      status: (prog?.status as TopicStatus) || 'Not Started',
+      last_studied: prog?.last_studied || null,
+    },
+  };
+}
+
+function sectionToNode(
+  section: { id: string; name: string; topics: { id: string; name: string; description?: string }[] },
+  progressMap: Record<string, TopicProgress>
+): SyllabusProgressNode {
+  const childTopics = section.topics.map((t) => topicToNode(t, progressMap));
+  return aggregateNode(section.id, section.name, 'subsubject', childTopics);
+}
+
+function subjectToNode(
+  subject: MasterSyllabusSubject,
+  progressMap: Record<string, TopicProgress>,
+  customTitle?: string
+): SyllabusProgressNode {
+  const sectionNodes = subject.sections.map((sec) => sectionToNode(sec, progressMap));
+  return aggregateNode(subject.id, customTitle || subject.name, 'subject', sectionNodes);
+}
+
+export function buildHierarchicalPortionTree(
+  progressMap: Record<string, TopicProgress>,
+  optionalSubjectName?: string | null
+): PortionHierarchyTree {
+  const findSubj = (id: string): MasterSyllabusSubject => {
+    const s = MASTER_SYLLABUS.find((item) => item.id === id);
+    if (!s) {
+      throw new Error(`Subject with id ${id} not found in MASTER_SYLLABUS`);
+    }
+    return s;
+  };
+
+  // PRELIMS - Paper I (General Studies)
+  const preGsSubjects: SyllabusProgressNode[] = [
+    subjectToNode(findSubj('subj-pre-ca'), progressMap, 'Current Events'),
+    subjectToNode(findSubj('subj-pre-geo'), progressMap, 'Indian & World Geography'),
+    subjectToNode(findSubj('subj-pre-hist'), progressMap, 'Indian History & National Movement'),
+    subjectToNode(findSubj('subj-pre-polity'), progressMap, 'Indian Polity & Governance'),
+    subjectToNode(findSubj('subj-pre-eco'), progressMap, 'Economic & Social Development'),
+    subjectToNode(findSubj('subj-pre-env'), progressMap, 'Environment & Ecology'),
+    subjectToNode(findSubj('subj-pre-scitech'), progressMap, 'General Science'),
+  ];
+  const paperPreGs = aggregateNode('paper-pre-gs', 'Paper I – General Studies', 'paper', preGsSubjects);
+
+  // PRELIMS - Paper II (CSAT)
+  const csatSubj = findSubj('subj-pre-csat');
+  const csatAreas: SyllabusProgressNode[] = csatSubj.sections.map((sec) =>
+    aggregateNode(
+      sec.id,
+      sec.name,
+      'subject',
+      sec.topics.map((t) => topicToNode(t, progressMap))
+    )
+  );
+  const paperPreCsat = aggregateNode('paper-pre-csat', 'Paper II – CSAT', 'paper', csatAreas);
+
+  const prelimsNode = aggregateNode('exam-prelims', 'PRELIMS', 'exam', [paperPreGs, paperPreCsat]);
+
+  // MAINS - Qualifying Papers
+  const qualSubjects: SyllabusProgressNode[] = [
+    subjectToNode(findSubj('subj-mains-qual-lang'), progressMap, 'Indian Language'),
+    subjectToNode(findSubj('subj-mains-qual-eng'), progressMap, 'English'),
+  ];
+  const paperMainsQual = aggregateNode('paper-mains-qual', 'Qualifying Papers', 'paper', qualSubjects);
+
+  // MAINS - Essay
+  const paperMainsEssay = aggregateNode('paper-mains-essay', 'Essay', 'paper', [
+    subjectToNode(findSubj('subj-mains-essay'), progressMap, 'Essay'),
+  ]);
+
+  // MAINS - GS-I
+  const gs1HistoryCombined = aggregateNode('subj-mains-gs1-history-combined', 'Indian History', 'subject', [
+    sectionToNode(findSubj('subj-mains-gs1-history').sections[0], progressMap),
+    sectionToNode(findSubj('subj-mains-gs1-world').sections[0], progressMap),
+  ]);
+  const gs1Subjects: SyllabusProgressNode[] = [
+    subjectToNode(findSubj('subj-mains-gs1-culture'), progressMap, 'Indian Heritage & Culture'),
+    gs1HistoryCombined,
+    subjectToNode(findSubj('subj-mains-gs1-geo'), progressMap, 'World Geography'),
+    subjectToNode(findSubj('subj-mains-gs1-society'), progressMap, 'Indian Society'),
+  ];
+  const paperMainsGs1 = aggregateNode('paper-mains-gs1', 'GS-I', 'paper', gs1Subjects);
+
+  // MAINS - GS-II
+  const gs2GovSubj = findSubj('subj-mains-gs2-gov');
+  const gs2GovSection = gs2GovSubj.sections[0];
+  const half = Math.ceil(gs2GovSection.topics.length / 2);
+  const govTopics = gs2GovSection.topics.slice(0, half).map((t) => topicToNode(t, progressMap));
+  const polityTopics = gs2GovSection.topics.slice(half).map((t) => topicToNode(t, progressMap));
+
+  const gs2Subjects: SyllabusProgressNode[] = [
+    aggregateNode('subj-mains-gs2-governance', 'Governance', 'subject', [
+      aggregateNode('sec-gs2-gov', 'Governance & Civil Services', 'subsubject', govTopics),
+    ]),
+    subjectToNode(findSubj('subj-mains-gs2-const'), progressMap, 'Constitution'),
+    aggregateNode('subj-mains-gs2-polity-part', 'Polity', 'subject', [
+      aggregateNode('sec-gs2-polity', 'Polity & Institutional Framework', 'subsubject', polityTopics),
+    ]),
+    subjectToNode(findSubj('subj-mains-gs2-socjus'), progressMap, 'Social Justice'),
+    subjectToNode(findSubj('subj-mains-gs2-ir'), progressMap, 'International Relations'),
+  ];
+  const paperMainsGs2 = aggregateNode('paper-mains-gs2', 'GS-II', 'paper', gs2Subjects);
+
+  // MAINS - GS-III
+  const gs3EnvSubj = findSubj('subj-mains-gs3-env');
+  const envTopics = gs3EnvSubj.sections[0].topics;
+  const bioTopics = envTopics.slice(0, Math.ceil(envTopics.length / 2)).map((t) => topicToNode(t, progressMap));
+  const restEnvTopics = envTopics.slice(Math.ceil(envTopics.length / 2)).map((t) => topicToNode(t, progressMap));
+
+  const gs3Subjects: SyllabusProgressNode[] = [
+    subjectToNode(findSubj('subj-mains-gs3-scitech'), progressMap, 'Technology'),
+    aggregateNode('subj-mains-gs3-eco-combined', 'Economic Development', 'subject', [
+      sectionToNode(findSubj('subj-mains-gs3-eco').sections[0], progressMap),
+      sectionToNode(findSubj('subj-mains-gs3-agri').sections[0], progressMap),
+    ]),
+    aggregateNode('subj-mains-gs3-bio', 'Biodiversity', 'subject', [
+      aggregateNode('sec-gs3-bio', 'Biodiversity & Conservation', 'subsubject', bioTopics),
+    ]),
+    aggregateNode('subj-mains-gs3-env-rest', 'Environment', 'subject', [
+      aggregateNode('sec-gs3-env', 'Environmental Pollution & Degradation', 'subsubject', restEnvTopics),
+    ]),
+    subjectToNode(findSubj('subj-mains-gs3-sec'), progressMap, 'Security'),
+    subjectToNode(findSubj('subj-mains-gs3-dm'), progressMap, 'Disaster Management'),
+  ];
+  const paperMainsGs3 = aggregateNode('paper-mains-gs3', 'GS-III', 'paper', gs3Subjects);
+
+  // MAINS - GS-IV
+  const gs4Subj = findSubj('subj-mains-gs4-ethics');
+  const gs4Subjects: SyllabusProgressNode[] = [
+    aggregateNode('subj-mains-gs4-ethics-part', 'Ethics', 'subject', [
+      sectionToNode(gs4Subj.sections[0], progressMap),
+    ]),
+    aggregateNode('subj-mains-gs4-integrity-part', 'Integrity', 'subject', [
+      sectionToNode(gs4Subj.sections[2], progressMap),
+    ]),
+    aggregateNode('subj-mains-gs4-aptitude-part', 'Aptitude', 'subject', [
+      sectionToNode(gs4Subj.sections[1], progressMap),
+      sectionToNode(gs4Subj.sections[3], progressMap),
+    ]),
+  ];
+  const paperMainsGs4 = aggregateNode('paper-mains-gs4', 'GS-IV', 'paper', gs4Subjects);
+
+  const mainsPapers = [paperMainsQual, paperMainsEssay, paperMainsGs1, paperMainsGs2, paperMainsGs3, paperMainsGs4];
+  const mainsNode = aggregateNode('exam-mains', 'MAINS', 'exam', mainsPapers);
+
+  // OPTIONAL
+  const hasOptionalSelected = isValidOptionalSubject(optionalSubjectName);
+  let optionalNode: SyllabusProgressNode | null = null;
+  const overallChildren: SyllabusProgressNode[] = [prelimsNode, mainsNode];
+
+  if (hasOptionalSelected && optionalSubjectName) {
+    const optSubj = getOptionalSyllabus(optionalSubjectName);
+    const paper1Sections = optSubj.sections.slice(0, 2).map((sec) => sectionToNode(sec, progressMap));
+    const paper2Sections = optSubj.sections.slice(2, 4).map((sec) => sectionToNode(sec, progressMap));
+
+    const optPaper1 = aggregateNode('paper-opt-1', `${optionalSubjectName} – Paper I`, 'paper', [
+      aggregateNode('sub-opt-p1', 'Paper I: Foundations & Methods', 'subject', paper1Sections),
+    ]);
+    const optPaper2 = aggregateNode('paper-opt-2', `${optionalSubjectName} – Paper II`, 'paper', [
+      aggregateNode('sub-opt-p2', 'Paper II: Indian Context & Case Studies', 'subject', paper2Sections),
+    ]);
+
+    optionalNode = aggregateNode('exam-optional', `OPTIONAL (${optionalSubjectName})`, 'exam', [optPaper1, optPaper2]);
+    overallChildren.push(optionalNode);
+  }
+
+  const overallNode = aggregateNode('overall-upsc', 'Overall UPSC Portion Completion', 'overall', overallChildren);
+
+  return {
+    overall: overallNode,
+    prelims: prelimsNode,
+    mains: mainsNode,
+    optional: optionalNode,
+    hasOptionalSelected,
+    selectedOptionalName: hasOptionalSelected ? optionalSubjectName || null : null,
+  };
+}
+

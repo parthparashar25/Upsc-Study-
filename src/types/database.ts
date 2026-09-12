@@ -10,7 +10,7 @@ export interface Profile {
 }
 
 export type ExamCategory = 'Prelims' | 'Mains';
-export type PaperType = 'General' | 'GS1' | 'GS2' | 'GS3' | 'GS4' | 'Essay' | 'Optional';
+export type PaperType = 'General' | 'GS1' | 'GS2' | 'GS3' | 'GS4' | 'Essay' | 'Optional' | 'Qualifying';
 export type TopicStatus = 'Not Started' | 'In Progress' | 'Completed' | 'Revision Due';
 
 export interface SyllabusSubject {

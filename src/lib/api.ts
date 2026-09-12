@@ -14,8 +14,16 @@ import {
   TopicProgress,
   TopicStatus,
 } from '@/types/database';
-import { INITIAL_SUBJECTS } from './constants';
-import { MASTER_SYLLABUS, getAllTopics, computeTopicStatus } from './syllabus-data';
+import { INITIAL_SUBJECTS, isValidOptionalSubject } from './constants';
+import {
+  MASTER_SYLLABUS,
+  getAllTopics,
+  computeTopicStatus,
+  buildHierarchicalPortionTree,
+  PortionHierarchyTree,
+  SyllabusProgressNode,
+  getOptionalSyllabus,
+} from './syllabus-data';
 import { DEFAULT_UPSC_BOOKS } from './books-data';
 
 // Local storage keys for offline/demo operation
@@ -263,17 +271,26 @@ export interface SyllabusCategoryStats {
   percent: number;
 }
 
-export async function fetchSyllabusStatistics(userId: string): Promise<{
+export async function fetchSyllabusStatistics(
+  userId: string,
+  optionalSubject?: string | null
+): Promise<{
   overall: SyllabusCategoryStats;
   prelims: SyllabusCategoryStats;
   mains: SyllabusCategoryStats;
+  optional: SyllabusCategoryStats | null;
   subjectStats: Record<string, SyllabusCategoryStats>;
+  totalRevisionsCount?: number;
+  totalPyqsCount?: number;
+  totalStudySessionsCount?: number;
 }> {
-  if (cache.syllabusStats[userId] && Date.now() - cache.syllabusStats[userId].ts < CACHE_TTL_MS) {
-    return cache.syllabusStats[userId].data;
+  const cacheKey = `${userId}_${optionalSubject || 'none'}`;
+  if (cache.syllabusStats[cacheKey] && Date.now() - cache.syllabusStats[cacheKey].ts < CACHE_TTL_MS) {
+    return cache.syllabusStats[cacheKey].data;
   }
 
-  const allTopics = getAllTopics();
+  const hasOptional = isValidOptionalSubject(optionalSubject);
+  const allTopics = getAllTopics(optionalSubject);
   const progressMap = await fetchTopicProgress(userId);
 
   const createStats = (): SyllabusCategoryStats => ({
@@ -288,11 +305,17 @@ export async function fetchSyllabusStatistics(userId: string): Promise<{
   const overall = createStats();
   const prelims = createStats();
   const mains = createStats();
+  const optional = hasOptional ? createStats() : null;
   const subjectStats: Record<string, SyllabusCategoryStats> = {};
 
   MASTER_SYLLABUS.forEach((s) => {
     subjectStats[s.id] = createStats();
   });
+
+  if (hasOptional && optionalSubject) {
+    const optSyllabus = getOptionalSyllabus(optionalSubject);
+    subjectStats[optSyllabus.id] = createStats();
+  }
 
   allTopics.forEach((t) => {
     const prog = progressMap[t.id];
@@ -306,12 +329,27 @@ export async function fetchSyllabusStatistics(userId: string): Promise<{
     else overall.notStarted++;
 
     // Exam category
-    const targetExam = t.exam === 'Prelims' ? prelims : mains;
-    targetExam.total++;
-    if (status === 'Completed') targetExam.completed++;
-    else if (status === 'In Progress') targetExam.inProgress++;
-    else if (status === 'Revision Due') targetExam.revisionDue++;
-    else targetExam.notStarted++;
+    if (t.exam === 'Prelims') {
+      prelims.total++;
+      if (status === 'Completed') prelims.completed++;
+      else if (status === 'In Progress') prelims.inProgress++;
+      else if (status === 'Revision Due') prelims.revisionDue++;
+      else prelims.notStarted++;
+    } else if (t.paper === 'Optional' || t.subject_id?.includes('opt')) {
+      if (optional) {
+        optional.total++;
+        if (status === 'Completed') optional.completed++;
+        else if (status === 'In Progress') optional.inProgress++;
+        else if (status === 'Revision Due') optional.revisionDue++;
+        else optional.notStarted++;
+      }
+    } else {
+      mains.total++;
+      if (status === 'Completed') mains.completed++;
+      else if (status === 'In Progress') mains.inProgress++;
+      else if (status === 'Revision Due') mains.revisionDue++;
+      else mains.notStarted++;
+    }
 
     // Subject
     if (t.subject_id && subjectStats[t.subject_id]) {
@@ -328,6 +366,9 @@ export async function fetchSyllabusStatistics(userId: string): Promise<{
   overall.percent = overall.total > 0 ? Math.round((overall.completed / overall.total) * 100) : 0;
   prelims.percent = prelims.total > 0 ? Math.round((prelims.completed / prelims.total) * 100) : 0;
   mains.percent = mains.total > 0 ? Math.round((mains.completed / mains.total) * 100) : 0;
+  if (optional) {
+    optional.percent = optional.total > 0 ? Math.round((optional.completed / optional.total) * 100) : 0;
+  }
 
   let totalRevisionsCount = 0;
   let totalPyqsCount = 0;
@@ -343,13 +384,22 @@ export async function fetchSyllabusStatistics(userId: string): Promise<{
     overall,
     prelims,
     mains,
+    optional,
     subjectStats,
     totalRevisionsCount,
     totalPyqsCount,
     totalStudySessionsCount,
   };
-  cache.syllabusStats[userId] = { data: result, ts: Date.now() };
+  cache.syllabusStats[cacheKey] = { data: result, ts: Date.now() };
   return result;
+}
+
+export async function fetchHierarchicalPortionTree(
+  userId: string,
+  optionalSubject?: string | null
+): Promise<PortionHierarchyTree> {
+  const progressMap = await fetchTopicProgress(userId);
+  return buildHierarchicalPortionTree(progressMap, optionalSubject);
 }
 
 // ----------------------------------------------------------------------

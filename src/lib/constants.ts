@@ -100,6 +100,27 @@ export const UPSC_OPTIONAL_LITERATURE_SUBJECTS = [
   'English Literature',
 ];
 
+export const ALL_UPSC_OPTIONAL_SUBJECTS: string[] = [
+  ...UPSC_OPTIONAL_CORE_SUBJECTS,
+  ...UPSC_OPTIONAL_LITERATURE_SUBJECTS,
+];
+
+export function isValidOptionalSubject(subj?: string | null): boolean {
+  if (!subj) return false;
+  const trimmed = subj.trim();
+  if (
+    trimmed === '' ||
+    trimmed === 'None' ||
+    trimmed === 'Not Selected' ||
+    trimmed === 'General' ||
+    trimmed === 'null' ||
+    trimmed === 'undefined'
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export function getGreeting(): string {
   const hour = new Date().getHours();
   if (hour < 12) return 'Good morning';
