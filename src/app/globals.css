@@ -1,44 +1,56 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
 
-@layer base {
-  :root {
-    color-scheme: light;
-  }
+:root {
+  color-scheme: light;
+}
 
-  html.dark {
-    color-scheme: dark;
-  }
+html.dark {
+  color-scheme: dark;
+}
 
-  body {
-    @apply antialiased transition-colors duration-200 selection:bg-gray-900 selection:text-white dark:selection:bg-white dark:selection:text-gray-900;
-  }
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+}
 
-  /* Sleek modern scrollbars for both Light and Dark modes */
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
+::selection {
+  background-color: rgb(17 24 39);
+  color: rgb(255 255 255);
+}
 
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
+html.dark ::selection {
+  background-color: rgb(255 255 255);
+  color: rgb(17 24 39);
+}
 
-  ::-webkit-scrollbar-thumb {
-    background: rgba(156, 163, 175, 0.35);
-    border-radius: 9999px;
-  }
+/* Sleek modern scrollbars for both Light and Dark modes */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
 
-  ::-webkit-scrollbar-thumb:hover {
-    background: rgba(107, 114, 128, 0.6);
-  }
+::-webkit-scrollbar-track {
+  background: transparent;
+}
 
-  html.dark ::-webkit-scrollbar-thumb {
-    background: rgba(107, 114, 128, 0.45);
-  }
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.35);
+  border-radius: 9999px;
+}
 
-  html.dark ::-webkit-scrollbar-thumb:hover {
-    background: rgba(156, 163, 175, 0.7);
-  }
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(107, 114, 128, 0.6);
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: rgba(107, 114, 128, 0.45);
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.7);
 }
