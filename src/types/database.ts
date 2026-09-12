@@ -119,3 +119,26 @@ export interface StudyFile {
   created_at: string;
   download_url?: string;
 }
+
+export type BookReadingStatus = 'To Read' | 'Reading' | 'Completed';
+export type BookImportance = 'Essential' | 'Recommended' | 'Reference';
+
+export interface ReferenceBook {
+  id: string;
+  user_id: string;
+  title: string;
+  author: string;
+  subject_id: string;
+  subject_name: string;
+  category: string; // 'Standard Reference' | 'NCERT' | 'Government Report' | 'Custom'
+  importance: BookImportance;
+  edition?: string;
+  description?: string;
+  storage_path?: string | null;
+  download_url?: string | null;
+  status: BookReadingStatus;
+  notes?: string;
+  created_at: string;
+  updated_at?: string;
+}
+

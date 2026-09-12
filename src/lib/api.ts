@@ -1,9 +1,12 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 import {
+  BookImportance,
+  BookReadingStatus,
   DailyStats,
   HabitCompletion,
   Note,
   Profile,
+  ReferenceBook,
   StudyFile,
   Subject,
   SyllabusTopic,
@@ -12,6 +15,7 @@ import {
 } from '@/types/database';
 import { INITIAL_SUBJECTS } from './constants';
 import { MASTER_SYLLABUS, getAllTopics, computeTopicStatus } from './syllabus-data';
+import { DEFAULT_UPSC_BOOKS } from './books-data';
 
 // Local storage keys for offline/demo operation
 const LS_PREFIX = 'upsc_tracker_';
@@ -21,6 +25,7 @@ const LS_NOTES = `${LS_PREFIX}notes`;
 const LS_FILES = `${LS_PREFIX}files`;
 const LS_PROFILE = `${LS_PREFIX}profile`;
 const LS_TOPIC_PROGRESS = `${LS_PREFIX}topic_progress`;
+const LS_BOOKS = `${LS_PREFIX}reference_books`;
 
 function getLocal<T>(key: string, fallback: T): T {
   try {
@@ -51,6 +56,7 @@ const cache = {
   monthSummary: {} as Record<string, { data: Record<string, DaySummary>; ts: number }>,
   notes: {} as Record<string, { data: Note[]; ts: number }>,
   studyFiles: {} as Record<string, { data: StudyFile[]; ts: number }>,
+  referenceBooks: {} as Record<string, { data: ReferenceBook[]; ts: number }>,
   profile: {} as Record<string, { data: Profile; ts: number }>,
   syllabusStats: {} as Record<string, { data: any; ts: number }>,
 };
@@ -762,10 +768,12 @@ export async function fetchNotes(userId: string): Promise<Note[]> {
           .order('updated_at', { ascending: false });
 
         if (!error && data) {
-          const notes = data.map((n: any) => ({
-            ...n,
-            subject_name: n.subjects?.name || '',
-          }));
+          const notes = data
+            .filter((n: any) => !n.title?.startsWith('__upsc_'))
+            .map((n: any) => ({
+              ...n,
+              subject_name: n.subjects?.name || '',
+            }));
           cache.notes[userId] = { data: notes, ts: Date.now() };
           setLocal(LS_NOTES, notes);
           return notes;
@@ -773,13 +781,13 @@ export async function fetchNotes(userId: string): Promise<Note[]> {
       } catch (err) {
         console.error('Error fetching notes from Supabase:', err);
       }
-      const local = getLocal<Note[]>(LS_NOTES, []);
+      const local = getLocal<Note[]>(LS_NOTES, []).filter((n) => !n.title?.startsWith('__upsc_'));
       cache.notes[userId] = { data: local, ts: Date.now() };
       return local;
     });
   }
 
-  const local = getLocal<Note[]>(LS_NOTES, []);
+  const local = getLocal<Note[]>(LS_NOTES, []).filter((n) => !n.title?.startsWith('__upsc_'));
   cache.notes[userId] = { data: local, ts: Date.now() };
   return local;
 }
@@ -932,9 +940,30 @@ export async function fetchStudyFiles(userId: string): Promise<StudyFile[]> {
           .order('created_at', { ascending: false });
 
         if (!error && data) {
+          // Batch generate signed URLs (valid for 24 hours = 86400s) for files with storage_path
+          const paths = data.map((f: any) => f.storage_path).filter((p: any): p is string => Boolean(p));
+          let signedUrlMap: Record<string, string> = {};
+          if (paths.length > 0) {
+            try {
+              const { data: signedData, error: signedErr } = await supabase.storage
+                .from('study-files')
+                .createSignedUrls(paths, 86400);
+              if (!signedErr && signedData) {
+                signedData.forEach((item: any) => {
+                  if (item?.path && item?.signedUrl) {
+                    signedUrlMap[item.path] = item.signedUrl;
+                  }
+                });
+              }
+            } catch (sErr) {
+              console.warn('Could not generate batch signed URLs:', sErr);
+            }
+          }
+
           const files = data.map((f: any) => ({
             ...f,
             subject_name: f.subject_id || '',
+            download_url: signedUrlMap[f.storage_path] || null,
           }));
           cache.studyFiles[userId] = { data: files, ts: Date.now() };
           setLocal(LS_FILES, files);
@@ -1001,11 +1030,25 @@ export async function uploadStudyFile(
 
       if (dbError) throw dbError;
 
+      // Generate signed URL immediately for 24 hours
+      let downloadUrl: string | null = null;
+      try {
+        const { data: signData } = await supabase.storage
+          .from('study-files')
+          .createSignedUrl(storagePath, 86400);
+        if (signData?.signedUrl) {
+          downloadUrl = signData.signedUrl;
+        }
+      } catch (signErr) {
+        console.warn('Could not generate signed URL for uploaded file:', signErr);
+      }
+
       const newFile: StudyFile = {
         ...dbData,
         subject_name: subjectName || subjectId || '',
         section_name: sectionName || '',
         topic_name: topicName || '',
+        download_url: downloadUrl,
       };
 
       // Add to in-memory cache
@@ -1259,5 +1302,349 @@ export async function updateProfileData(userId: string, profile: Partial<Profile
     daily_study_target: 4,
   });
   setLocal(LS_PROFILE, { ...existing, ...profile, updated_at: new Date().toISOString() });
+  return true;
+}
+
+// ----------------------------------------------------------------------
+// REFERENCE BOOKS & TEXTBOOKS API (Cross-Device Cloud Sync)
+// ----------------------------------------------------------------------
+
+interface PersistedBooksState {
+  userOverrides: Record<string, {
+    status?: BookReadingStatus;
+    notes?: string;
+    storage_path?: string | null;
+  }>;
+  customBooks: ReferenceBook[];
+}
+
+async function getPersistedBooksState(userId: string): Promise<{ noteId?: string; state: PersistedBooksState }> {
+  const fallbackState: PersistedBooksState = { userOverrides: {}, customBooks: [] };
+
+  if (isSupabaseConfigured && userId) {
+    try {
+      const { data, error } = await supabase
+        .from('notes')
+        .select('id, content')
+        .eq('user_id', userId)
+        .eq('title', '__upsc_reference_books__')
+        .maybeSingle();
+
+      if (!error && data?.content) {
+        try {
+          const parsed = JSON.parse(data.content);
+          return {
+            noteId: data.id,
+            state: {
+              userOverrides: parsed.userOverrides || {},
+              customBooks: parsed.customBooks || [],
+            },
+          };
+        } catch {
+          return { noteId: data.id, state: fallbackState };
+        }
+      } else if (data?.id) {
+        return { noteId: data.id, state: fallbackState };
+      }
+    } catch (err) {
+      console.warn('Could not load reference books state from Supabase:', err);
+    }
+  }
+
+  const local = getLocal<PersistedBooksState>(LS_BOOKS, fallbackState);
+  return { state: local };
+}
+
+async function savePersistedBooksState(
+  userId: string,
+  state: PersistedBooksState,
+  noteId?: string
+): Promise<void> {
+  setLocal(LS_BOOKS, state);
+
+  if (isSupabaseConfigured && userId) {
+    try {
+      const payload = {
+        user_id: userId,
+        title: '__upsc_reference_books__',
+        topic: 'Reference Books State',
+        content: JSON.stringify(state),
+        updated_at: new Date().toISOString(),
+      };
+
+      if (noteId) {
+        await supabase
+          .from('notes')
+          .update({
+            content: payload.content,
+            updated_at: payload.updated_at,
+          })
+          .eq('id', noteId)
+          .eq('user_id', userId);
+      } else {
+        const { data: existing } = await supabase
+          .from('notes')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('title', '__upsc_reference_books__')
+          .maybeSingle();
+
+        if (existing?.id) {
+          await supabase
+            .from('notes')
+            .update({
+              content: payload.content,
+              updated_at: payload.updated_at,
+            })
+            .eq('id', existing.id)
+            .eq('user_id', userId);
+        } else {
+          await supabase.from('notes').insert(payload);
+        }
+      }
+    } catch (err) {
+      console.error('Error saving reference books state to Supabase:', err);
+    }
+  }
+}
+
+export async function fetchReferenceBooks(userId: string): Promise<ReferenceBook[]> {
+  if (cache.referenceBooks[userId] && Date.now() - cache.referenceBooks[userId].ts < CACHE_TTL_MS) {
+    return cache.referenceBooks[userId].data;
+  }
+
+  const { state } = await getPersistedBooksState(userId);
+
+  // 1. Build list starting with standard UPSC reference books catalog
+  const books: ReferenceBook[] = DEFAULT_UPSC_BOOKS.map((b) => {
+    const override = state.userOverrides[b.id] || {};
+    return {
+      id: b.id,
+      user_id: userId || 'demo-user',
+      title: b.title,
+      author: b.author,
+      subject_id: b.subject_id,
+      subject_name: b.subject_name,
+      category: b.category,
+      importance: b.importance,
+      edition: b.edition,
+      description: b.description,
+      status: override.status || 'To Read',
+      notes: override.notes || '',
+      storage_path: override.storage_path || null,
+      download_url: null,
+      created_at: '2025-01-01T00:00:00.000Z',
+    };
+  });
+
+  // 2. Append user custom books
+  if (Array.isArray(state.customBooks)) {
+    state.customBooks.forEach((cb) => {
+      const override = state.userOverrides[cb.id] || {};
+      books.push({
+        ...cb,
+        status: override.status || cb.status || 'To Read',
+        notes: override.notes !== undefined ? override.notes : (cb.notes || ''),
+        storage_path: override.storage_path || cb.storage_path || null,
+      });
+    });
+  }
+
+  // 3. Batch generate 24h signed URLs for any attached PDFs
+  if (isSupabaseConfigured) {
+    const paths = books
+      .map((b) => b.storage_path)
+      .filter((p): p is string => Boolean(p && !p.startsWith('local/')));
+
+    if (paths.length > 0) {
+      try {
+        const { data: signedData, error: signedErr } = await supabase.storage
+          .from('study-files')
+          .createSignedUrls(paths, 86400);
+
+        if (!signedErr && signedData) {
+          const urlMap: Record<string, string> = {};
+          signedData.forEach((item: any) => {
+            if (item?.path && item?.signedUrl) {
+              urlMap[item.path] = item.signedUrl;
+            }
+          });
+          books.forEach((b) => {
+            if (b.storage_path && urlMap[b.storage_path]) {
+              b.download_url = urlMap[b.storage_path];
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('Error resolving signed URLs for reference books:', err);
+      }
+    }
+  }
+
+  cache.referenceBooks[userId] = { data: books, ts: Date.now() };
+  return books;
+}
+
+export async function updateBookStatus(
+  userId: string,
+  bookId: string,
+  status: BookReadingStatus,
+  notes?: string
+): Promise<boolean> {
+  // Optimistic update in cache
+  if (cache.referenceBooks[userId]) {
+    cache.referenceBooks[userId].data = cache.referenceBooks[userId].data.map((b) => {
+      if (b.id === bookId) {
+        return {
+          ...b,
+          status,
+          notes: notes !== undefined ? notes : b.notes,
+          updated_at: new Date().toISOString(),
+        };
+      }
+      return b;
+    });
+  }
+
+  const { noteId, state } = await getPersistedBooksState(userId);
+  state.userOverrides[bookId] = {
+    ...state.userOverrides[bookId],
+    status,
+    ...(notes !== undefined ? { notes } : {}),
+  };
+  await savePersistedBooksState(userId, state, noteId);
+  return true;
+}
+
+export async function attachFileToBook(
+  userId: string,
+  bookId: string,
+  storagePath: string,
+  downloadUrl?: string
+): Promise<boolean> {
+  // Optimistic update in cache
+  if (cache.referenceBooks[userId]) {
+    cache.referenceBooks[userId].data = cache.referenceBooks[userId].data.map((b) => {
+      if (b.id === bookId) {
+        return {
+          ...b,
+          storage_path: storagePath,
+          download_url: downloadUrl || b.download_url,
+          updated_at: new Date().toISOString(),
+        };
+      }
+      return b;
+    });
+  }
+
+  const { noteId, state } = await getPersistedBooksState(userId);
+  state.userOverrides[bookId] = {
+    ...state.userOverrides[bookId],
+    storage_path: storagePath,
+  };
+  await savePersistedBooksState(userId, state, noteId);
+  return true;
+}
+
+export async function uploadBookPdf(
+  userId: string,
+  bookId: string,
+  file: File,
+  bookTitle: string,
+  subjectName: string
+): Promise<{ success: boolean; book?: ReferenceBook; error?: string }> {
+  if (isSupabaseConfigured && userId) {
+    try {
+      const safeFilename = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const safeSubject = (subjectName || 'books').toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const storagePath = `${userId}/books/${Date.now()}_${safeFilename}`;
+
+      const { error: storageError } = await supabase.storage
+        .from('study-files')
+        .upload(storagePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (storageError) {
+        throw new Error(`Storage upload failed: ${storageError.message}`);
+      }
+
+      // Also register in study_files table for unified file library
+      await supabase.from('study_files').insert({
+        user_id: userId,
+        subject_id: subjectName,
+        section_id: 'reference_book',
+        topic_id: bookId,
+        filename: file.name,
+        storage_path: storagePath,
+        file_type: file.type || 'application/pdf',
+        file_size: file.size,
+      });
+
+      // Generate signed URL
+      let downloadUrl: string | null = null;
+      const { data: signData } = await supabase.storage
+        .from('study-files')
+        .createSignedUrl(storagePath, 86400);
+      if (signData?.signedUrl) {
+        downloadUrl = signData.signedUrl;
+      }
+
+      await attachFileToBook(userId, bookId, storagePath, downloadUrl || undefined);
+
+      // Invalidate studyFiles cache so the file library immediately reflects it
+      delete cache.studyFiles[userId];
+
+      const currentBooks = cache.referenceBooks[userId]?.data || [];
+      const updatedBook = currentBooks.find((b) => b.id === bookId);
+
+      return { success: true, book: updatedBook };
+    } catch (err: any) {
+      console.error('Error uploading book PDF:', err);
+      return { success: false, error: err?.message || 'Failed to upload book PDF.' };
+    }
+  }
+
+  // Fallback for offline/demo
+  const localUrl = URL.createObjectURL(file);
+  await attachFileToBook(userId, bookId, `local/books/${file.name}`, localUrl);
+  const currentBooks = cache.referenceBooks[userId]?.data || [];
+  const updatedBook = currentBooks.find((b) => b.id === bookId);
+  return { success: true, book: updatedBook };
+}
+
+export async function createCustomBook(
+  userId: string,
+  bookData: Omit<ReferenceBook, 'id' | 'user_id' | 'created_at'>
+): Promise<ReferenceBook> {
+  const newBook: ReferenceBook = {
+    ...bookData,
+    id: `custom-book-${Date.now()}`,
+    user_id: userId || 'demo-user',
+    created_at: new Date().toISOString(),
+    status: bookData.status || 'To Read',
+  };
+
+  const { noteId, state } = await getPersistedBooksState(userId);
+  state.customBooks = [newBook, ...(state.customBooks || [])];
+  await savePersistedBooksState(userId, state, noteId);
+
+  if (cache.referenceBooks[userId]) {
+    cache.referenceBooks[userId].data.unshift(newBook);
+  }
+
+  return newBook;
+}
+
+export async function deleteCustomBook(userId: string, bookId: string): Promise<boolean> {
+  if (cache.referenceBooks[userId]) {
+    cache.referenceBooks[userId].data = cache.referenceBooks[userId].data.filter((b) => b.id !== bookId);
+  }
+
+  const { noteId, state } = await getPersistedBooksState(userId);
+  state.customBooks = (state.customBooks || []).filter((b) => b.id !== bookId);
+  delete state.userOverrides[bookId];
+  await savePersistedBooksState(userId, state, noteId);
   return true;
 }

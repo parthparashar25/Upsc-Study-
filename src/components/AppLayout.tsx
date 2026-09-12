@@ -14,6 +14,7 @@ import {
   Squares2X2Icon,
   ClipboardDocumentCheckIcon,
   BookOpenIcon,
+  BuildingLibraryIcon,
   CalendarDaysIcon,
   DocumentTextIcon,
   FolderIcon,
@@ -54,11 +55,12 @@ export function AppLayout({ children, title, subtitle }: AppLayoutProps) {
   }, [user, loading, router]);
 
   // Sidebar navigation order matching specification:
-  // Main: Dashboard, Habits, Syllabus, Calendar, Notes, Files
+  // Main: Dashboard, Habits, Syllabus, Reference Books, Calendar, Notes, Files
   const mainNavItems = [
     { name: "Dashboard", href: "/dashboard", icon: Squares2X2Icon },
     { name: "Habits", href: "/habits", icon: ClipboardDocumentCheckIcon },
     { name: "Syllabus", href: "/syllabus", icon: BookOpenIcon },
+    { name: "Reference Books", href: "/books", icon: BuildingLibraryIcon },
     { name: "Calendar", href: "/calendar", icon: CalendarDaysIcon },
     { name: "Notes", href: "/notes", icon: DocumentTextIcon },
     { name: "Files", href: "/files", icon: FolderIcon },
